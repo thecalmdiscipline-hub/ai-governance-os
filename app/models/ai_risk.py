@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from app.db.base import Base
 
 
@@ -14,6 +15,8 @@ class AIRisk(Base):
 
     status = Column(String, default="open")
     is_deleted = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     ai_system_id = Column(Integer, ForeignKey("ai_systems.id"))
 

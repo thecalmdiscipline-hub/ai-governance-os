@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 
 class AISystemCreate(BaseModel):
@@ -17,14 +18,12 @@ class AISystemResponse(BaseModel):
     organization_id: int
 
     class Config:
-        orm_mode = True
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+        from_attributes = True
 
 
 class AISystemUpdate(BaseModel):
     risk_category: Optional[str] = None
     lifecycle_stage: Optional[str] = None
     conformity_assessed: Optional[bool] = None
-    last_reviewed_at: Optional[datetime] = None        
+    last_reviewed_at: Optional[datetime] = None
+    reason: str

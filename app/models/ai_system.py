@@ -24,7 +24,6 @@ class AISystem(Base):
     is_deleted = Column(Boolean, default=False)
 
     organization_id = Column(Integer, ForeignKey("organizations.id"))
-
     organization = relationship("Organization", back_populates="ai_systems")
     risks = relationship("AIRisk", back_populates="ai_system", cascade="all, delete")
     incidents = relationship("AIIncident", back_populates="ai_system", cascade="all, delete")
