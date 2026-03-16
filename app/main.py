@@ -15,7 +15,26 @@ from app.core.security import verify_password, create_access_token
 from app.models.user import User
 from app.core.deployment_service import check_deployment_readiness
 from app.core.audit import generate_hmac_signature
+from typing import Optional
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timedelta
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Depends, HTTPException
+from app.core.rate_limiter import rate_limit_login
+from fastapi.middleware.cors import CORSMiddleware
+from collections import defaultdict
+import time
+from fastapi import Request
 import json
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+
+security_logger = logging.getLogger("security")
 
 # Load environment
 load_dotenv()
@@ -25,6 +44,62 @@ app = FastAPI(
     title=os.getenv("APP_NAME", "AI Governance OS"),
     version=os.getenv("APP_VERSION", "0.1.0")
 )
+
+login_attempts = defaultdict(list)
+
+def check_login_rate_limit(request: Request):
+    ip = request.client.host
+    now = time.time()
+
+    # Verwijder oude pogingen (ouder dan 60 sec)
+    login_attempts[ip] = [
+        t for t in login_attempts[ip] if now - t < 60
+    ]
+
+    if len(login_attempts[ip]) >= 5:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later."
+        )
+
+    login_attempts[ip].append(now)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # later beperken naar je echte domein
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+
+    return response
+
+from fastapi.responses import JSONResponse
+from fastapi import Request
+import logging
+
+logger = logging.getLogger("uvicorn.error")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error: {exc}")
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "message": "An unexpected error occurred."
+        },
+    )
 
 # Database setup
 from app.db.session import engine, SessionLocal
@@ -114,11 +189,7 @@ def require_role(required_role: str):
         return current_user
     return role_checker
 
-def get_org_scoped_system(
-    system_id: int,
-    current_user: User,
-    db: Session
-):
+
     system = db.query(AISystem).filter(
         AISystem.id == system_id,
         AISystem.organization_id == current_user.organization_id
@@ -198,8 +269,8 @@ def create_organization(org: OrganizationCreate, db: Session = Depends(get_db)):
 
     return db_org
 
-from pydantic import BaseModel, json
-from typing import Optional
+from pydantic import BaseModel
+import json
 
 class GovernanceConfigUpdate(BaseModel):
     required_production_approvals: Optional[int] = None
@@ -273,24 +344,26 @@ def create_ai_system(
 
 
 @app.delete("/ai-systems/{ai_system_id}")
-def soft_delete_ai_system(ai_system_id: int, db: Session = Depends(get_db)):
-    system = db.query(AISystem).filter(AISystem.id == ai_system_id).first()
-
-    if not system:
-        raise HTTPException(status_code=404, detail="AI System not found")
+def soft_delete_ai_system(
+    ai_system_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    system = get_org_scoped_system(ai_system_id, current_user, db)
 
     system.is_deleted = True
-    system.status = "archived"
+    system.lifecycle_stage = "archived"
     db.commit()
 
     create_audit_log(
-       db=db,
-       organization_id=int(system.organization_id),
-       entity_type="ai_system",
-       entity_id=int(system.id),
-       action="archived",
-       details=f"AI System {system.name} archived"
-   )
+        db=db,
+        organization_id=int(current_user.organization_id),
+        entity_type="ai_system",
+        entity_id=int(system.id),
+        action="archived",
+        details=f"AI System {system.name} archived by {current_user.username}",
+        performed_by=current_user.username
+    )
 
     return {"message": "AI system archived"}
 # -------------------------
@@ -372,10 +445,13 @@ def create_corrective_action(
 # -------------------------
 
 @app.post("/ai-policy", response_model=AIPolicyResponse)
-def generate_ai_policy(policy: AIPolicyCreate, db: Session = Depends(get_db)):
-    org = db.query(Organization).filter(Organization.id == policy.organization_id).first()
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
+def generate_ai_policy(
+    policy: AIPolicyCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 🔒 Tenant isolation
+    org = get_org_scoped_org(policy.organization_id, current_user, db)
 
     generated_policy = AIPolicy(
         purpose=f"The organization {org.name} uses AI responsibly.",
@@ -388,6 +464,17 @@ def generate_ai_policy(policy: AIPolicyCreate, db: Session = Depends(get_db)):
     db.add(generated_policy)
     db.commit()
     db.refresh(generated_policy)
+
+    create_audit_log(
+        db=db,
+        organization_id=org.id,
+        entity_type="ai_policy",
+        entity_id=generated_policy.id,
+        action="created",
+        details=f"AI policy generated by {current_user.username}",
+        performed_by=current_user.username
+    )
+
     return generated_policy
 
 # -------------------------
@@ -820,14 +907,21 @@ def production_readiness_check(
         "separation_of_duties_block": separation_block,
         "deployment_allowed": allowed
     }
+
 @app.get("/organizations/{organization_id}/audit-export")
 def audit_export(
     organization_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    org = get_org_scoped_org(organization_id, current_user, db)
+
+    from app.models import AuditLog
+    from app.core.audit import generate_hmac_signature
+    import json
 
     logs = db.query(AuditLog).filter(
-        AuditLog.organization_id == organization_id
+        AuditLog.organization_id == org.id
     ).order_by(AuditLog.id.asc()).all()
 
     export = []
@@ -843,25 +937,21 @@ def audit_export(
             "record_hash": log.record_hash
         })
 
-    import json
-
-    # laatste record hash = chain hash
     chain_hash = export[-1]["record_hash"] if export else None
 
     export_payload = {
-         "organization_id": organization_id,
+        "organization_id": org.id,
         "total_records": len(export),
         "chain_hash": chain_hash,
         "audit_chain": export
     }
 
-    # sign volledige export payload
     payload_string = json.dumps(export_payload, sort_keys=True)
     export_signature = generate_hmac_signature(payload_string)
 
     return {
-    "export": export_payload,
-    "export_signature": export_signature
+        "export": export_payload,
+        "export_signature": export_signature
     }
 
 # -------------------------
@@ -968,12 +1058,8 @@ def deploy_ai_system(
     current_user: User = Depends(require_role("admin")),
     db: Session = Depends(get_db)
 ):
-    system = db.query(AISystem).filter(
-        AISystem.id == system_id
-    ).first()
-
-    if not system:
-        raise HTTPException(status_code=404, detail="AI System not found")
+    # 🔒 Tenant isolation
+    system = get_org_scoped_system(system_id, current_user, db)
 
     check_deployment_readiness(system, db, current_user)
 
@@ -983,9 +1069,9 @@ def deploy_ai_system(
 
     create_audit_log(
         db=db,
-        organization_id=int(current_user.organization_id),
+        organization_id=current_user.organization_id,
         entity_type="ai_system",
-        entity_id=int(system.id),
+        entity_id=system.id,
         action="deployed",
         details=f"System deployed to production by {current_user.username}",
         performed_by=current_user.username
@@ -1000,18 +1086,45 @@ def deploy_ai_system(
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends, HTTPException
 
-@app.post("/login")
+@app.post("/login", dependencies=[Depends(rate_limit_login)])
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.username == form_data.username).first()
+    check_login_rate_limit(request)   
 
+    
+    error = HTTPException(status_code=401, detail="Invalid credentials")
+
+    user = db.query(User).filter(
+        User.username == form_data.username
+    ).first()
+
+    # Geen user → generieke fout
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        security_logger.warning(f"Failed login attempt for username: {form_data.username}")
+        raise error
 
+    # Account locked?
+    if user.account_locked_until and user.account_locked_until > datetime.utcnow():
+        raise error
+
+    # Wachtwoord fout
     if not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+
+        if user.failed_login_attempts >= 5:
+            user.account_locked_until = datetime.utcnow() + timedelta(minutes=15)
+            security_logger.warning(f"Invalid password attempt for user: {user.username}")
+        db.commit()
+        raise error
+
+    # Succes → reset counters
+    user.failed_login_attempts = 0
+    user.account_locked_until = None
+    db.commit()
 
     access_token = create_access_token(
         data={
@@ -1020,6 +1133,8 @@ def login(
             "org_id": user.organization_id
         }
     )
+
+    security_logger.info(f"Successful login for user: {user.username}")
 
     return {
         "access_token": access_token,

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, DateTime, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -14,3 +14,6 @@ class User(Base):
     is_super_admin = Column(Boolean, default=False)
 
     organization = relationship("Organization")
+
+    failed_login_attempts = Column(Integer, default=0)
+    account_locked_until = Column(DateTime, nullable=True)
