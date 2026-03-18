@@ -23,4 +23,7 @@ logs/
 .vscode/
 
 # Virtualenv
+venv/.env
 venv/
+venv/
+.env
