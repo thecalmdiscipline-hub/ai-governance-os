@@ -4,17 +4,19 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.workflows.schemas.base import WorkflowRunRequest, WorkflowRunResponse
-from app.workflows.services.base import run_workflow
+from app.workflows.services.base import run_workflow_stub
 
-router = APIRouter(prefix="/workflows/customer_support", tags=["workflows"])
+router = APIRouter(prefix="/customer-support", tags=["Workflows"])
+
+@router.get("/schema")
+def schema():
+    return WorkflowRunRequest.model_json_schema()
 
 @router.post("/run", response_model=WorkflowRunResponse)
-def run_customer_support(
-    req: WorkflowRunRequest,
+def run(
+    body: WorkflowRunRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # tenant isolation is enforced by get_current_user (org_id in token) and db lookup
-    # later: persist runs + audit log
-    result = run_workflow("customer_support", req.input, dry_run=req.dry_run)
+    result = run_workflow_stub("customer_support", {"input": body.input, "context": body.context, "user": current_user.username})
     return result
