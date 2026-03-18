@@ -4,30 +4,27 @@
 
 import hashlib
 import os
-from dotenv import load_dotenv
-from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
-from datetime import datetime
-from app.core.audit import create_audit_log, generate_hmac_signature
+import json
+import time
+import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Depends, HTTPException
+from typing import Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.audit import create_audit_log, generate_hmac_signature
+from app.core.deployment_service import check_deployment_readiness
+from app.core.rate_limiter import rate_limit_login
 from app.core.security import verify_password, create_access_token
 from app.models.user import User
-from app.core.deployment_service import check_deployment_readiness
-from app.core.audit import generate_hmac_signature
-from typing import Optional
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timedelta
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import Depends, HTTPException
-from app.core.rate_limiter import rate_limit_login
-from fastapi.middleware.cors import CORSMiddleware
-from collections import defaultdict
-import time
-from fastapi import Request
-import json
-import logging
+from app.workflows.routers import router as workflows_router
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +41,9 @@ app = FastAPI(
     title=os.getenv("APP_NAME", "AI Governance OS"),
     version=os.getenv("APP_VERSION", "0.1.0")
 )
+
+# Workflows router registreren
+app.include_router(workflows_router)
 
 login_attempts = defaultdict(list)
 
@@ -238,6 +238,9 @@ def get_org_scoped_org(organization_id: int, current_user: User, db: Session):
 
     return org
 
+# Import routers (direct imports; avoid app.api __init__ circular imports)
+from app.api import workflows
+
 # Basic routes
 @app.get("/")
 def root():
@@ -246,6 +249,8 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+app.include_router(workflows.router)
 
 # -------------------------
 # ORGANIZATIONS
