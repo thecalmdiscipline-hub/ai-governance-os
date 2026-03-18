@@ -1,13 +1,29 @@
-from typing import Dict, Any
+from __future__ import annotations
 
-def run_workflow(workflow_name: str, payload: Dict[str, Any], dry_run: bool = True) -> Dict[str, Any]:
-    # placeholder: later hook into agent orchestration / tools
-    return {
-        "workflow": workflow_name,
-        "status": "ok",
-        "dry_run": dry_run,
-        "output": {
-            "message": f"{workflow_name} executed (stub).",
-            "received_keys": sorted(list(payload.keys()))
-        }
-    }
+from datetime import datetime
+from typing import Any, Dict
+
+from sqlalchemy.orm import Session
+
+from app.models.user import User
+from app.workflows.schemas.base import WorkflowRunRequest, WorkflowRunResponse
+
+
+def run_workflow_stub(
+    workflow_name: str,
+    req: WorkflowRunRequest,
+    current_user: User,
+    db: Session,
+) -> WorkflowRunResponse:
+    now = datetime.utcnow().isoformat()
+    return WorkflowRunResponse(
+        workflow=workflow_name,
+        status="ok",
+        output={
+            "message": "stub",
+            "user": getattr(current_user, "username", None),
+            "input": getattr(req, "input", None),
+        },
+        started_at=now,
+        finished_at=now,
+    )
