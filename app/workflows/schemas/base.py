@@ -1,14 +1,12 @@
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
 
 class WorkflowRunRequest(BaseModel):
-    # later: input payload per workflow (now generic)
-    input: Dict[str, Any]
-    dry_run: bool = True
-    correlation_id: Optional[str] = None
+    input: Dict[str, Any] = Field(default_factory=dict)
+    context: Optional[Dict[str, Any]] = None
 
 class WorkflowRunResponse(BaseModel):
     workflow: str
+    run_id: str
     status: str
-    dry_run: bool
-    output: Dict[str, Any]
+    output: Dict[str, Any] = Field(default_factory=dict)
