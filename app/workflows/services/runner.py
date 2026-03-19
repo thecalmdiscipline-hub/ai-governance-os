@@ -1,8 +1,35 @@
-from typing import Any, Dict, Optional
+from typing import Dict, Any, Optional
+from uuid import uuid4
+
 from app.workflows.registry import WORKFLOWS
-from app.workflows.services.base import run_workflow_stub
+
+def _normalize_key(key: str) -> str:
+    return key.replace("-", "_").strip().lower()
 
 def run_workflow(workflow_key: str, payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any]:
-    if workflow_key not in WORKFLOWS:
-        return {"status": "error", "error": "unknown_workflow", "workflow": workflow_key}
-    return run_workflow_stub(workflow_key, payload, user_id=user_id)
+    run_id = str(uuid4())
+    key = _normalize_key(workflow_key)
+    fn = WORKFLOWS.get(key)
+    if not fn:
+        return {
+            "run_id": run_id,
+            "status": "error",
+            "error": "unknown_workflow",
+            "workflow": key,
+        }
+    try:
+        result = fn(payload=payload, user_id=user_id)
+        return {
+            "run_id": run_id,
+            "status": "ok",
+            "workflow": key,
+            "result": result,
+        }
+    except Exception as e:
+        return {
+            "run_id": run_id,
+            "status": "error",
+            "error": "exception",
+            "message": str(e),
+            "workflow": key,
+        }
