@@ -27,3 +27,6 @@ WORKFLOWS: Dict[str, Callable[..., Dict[str, Any]]] = {
 }
 
 WORKFLOW_REGISTRY = WORKFLOWS
+
+def normalize_workflow_key(key: str) -> str:
+    return normalize_workflow_key_impl(key)
