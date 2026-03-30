@@ -1,3 +1,6 @@
+def normalize_workflow_key_impl(key: str) -> str:
+    return (key or '').strip().lower().replace('-', '_')
+
 from typing import Any, Callable, Dict, Optional
 
 def _stub(workflow: str) -> Callable[..., Dict[str, Any]]:
