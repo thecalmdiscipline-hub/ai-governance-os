@@ -18,5 +18,5 @@ def run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    result = run_workflow("hr_recruitment", {"input": body.input, "context": body.context, "user": current_user.username})
+    result = run_workflow("hr_recruitment", {"input": body.input, "context": body.context, "user": current_user.username}, user_id=current_user.id)
     return result
