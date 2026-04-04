@@ -14,6 +14,7 @@ def _stub(workflow: str) -> Callable[..., Dict[str, Any]]:
     return _fn
 
 from app.workflows.implementations.sales_lead_qualification import sales_lead_qualification_run
+from app.workflows.implementations.quote_contract_generator import quote_contract_generator
 WORKFLOWS: Dict[str, Callable[..., Dict[str, Any]]] = {
     "customer_support": _stub("customer_support"),
     "document_knowledge": _stub("document_knowledge"),
@@ -45,3 +46,4 @@ try:
     WORKFLOW_REGISTRY["document_knowledge"] = document_knowledge_run
 except Exception:
     pass
+WORKFLOWS["quote_contract_generator"] = quote_contract_generator
