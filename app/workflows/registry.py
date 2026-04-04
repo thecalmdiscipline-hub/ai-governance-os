@@ -13,6 +13,7 @@ def _stub(workflow: str) -> Callable[..., Dict[str, Any]]:
         }
     return _fn
 
+from app.workflows.implementations.sales_lead_qualification import sales_lead_qualification_run
 WORKFLOWS: Dict[str, Callable[..., Dict[str, Any]]] = {
     "customer_support": _stub("customer_support"),
     "document_knowledge": _stub("document_knowledge"),
@@ -24,6 +25,7 @@ WORKFLOWS: Dict[str, Callable[..., Dict[str, Any]]] = {
     "compliance_monitoring": _stub("compliance_monitoring"),
     "hr_recruitment": _stub("hr_recruitment"),
     "business_intelligence": _stub("business_intelligence"),
+    "sales_lead_qualification": sales_lead_qualification_run,
 }
 
 WORKFLOW_REGISTRY = WORKFLOWS
