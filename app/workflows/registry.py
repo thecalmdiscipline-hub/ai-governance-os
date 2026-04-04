@@ -39,3 +39,9 @@ try:
     WORKFLOW_REGISTRY["customer_support"] = customer_support_run
 except Exception:
     pass
+try:
+    from app.workflows.implementations import document_knowledge_run
+    WORKFLOWS["document_knowledge"] = document_knowledge_run
+    WORKFLOW_REGISTRY["document_knowledge"] = document_knowledge_run
+except Exception:
+    pass
