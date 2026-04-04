@@ -1,22 +1,27 @@
 import os
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-# Fallback voor tests/CI als DATABASE_URL niet gezet is
-if not DATABASE_URL:
-    DATABASE_URL = "sqlite+pysqlite:///:memory:"
-    engine = create_engine(
-        DATABASE_URL,
-        echo=False,
-        future=True,
-        connect_args={"check_same_thread": False},
-    )
+if DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.strip().strip('"').strip("'")
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
 else:
-    engine = create_engine(DATABASE_URL, echo=True, future=True)
+    DATABASE_URL = "sqlite+pysqlite:///:memory:"
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    future=True,
+    connect_args=connect_args,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
