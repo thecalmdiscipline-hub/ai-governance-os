@@ -32,3 +32,10 @@ WORKFLOW_REGISTRY = WORKFLOWS
 
 def normalize_workflow_key(key: str) -> str:
     return normalize_workflow_key_impl(key)
+# IMPLEMENTATION OVERRIDES (auto)
+try:
+    from app.workflows.implementations import customer_support_run
+    WORKFLOWS["customer_support"] = customer_support_run
+    WORKFLOW_REGISTRY["customer_support"] = customer_support_run
+except Exception:
+    pass
