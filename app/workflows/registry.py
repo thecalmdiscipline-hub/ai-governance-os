@@ -15,6 +15,7 @@ def _stub(workflow: str) -> Callable[..., Dict[str, Any]]:
 
 from app.workflows.implementations.sales_lead_qualification import sales_lead_qualification_run
 from app.workflows.implementations.quote_contract_generator import quote_contract_generator
+from app.workflows.implementations.meeting_agenda_assistant import run as meeting_agenda_assistant_impl
 WORKFLOWS: Dict[str, Callable[..., Dict[str, Any]]] = {
     "customer_support": _stub("customer_support"),
     "document_knowledge": _stub("document_knowledge"),
