@@ -147,3 +147,12 @@ Run:
 Expected:
 - browser opens
 - customer2 can log in with own tenant account
+
+## Prepare demo state
+Run:
+./scripts/prepare_demo_state.sh
+
+Expected:
+- tenant 1 seeded with document and workflow
+- tenant 2 seeded with document and workflow
+- both tenants show isolated demo data

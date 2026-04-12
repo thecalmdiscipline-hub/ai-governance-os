@@ -34,3 +34,12 @@ Customer 2:
 
 Multi-tenant:
 ./scripts/smoke_multi_tenant.sh
+
+## Prepare ready-to-show demo data
+Run:
+./scripts/prepare_demo_state.sh
+
+Result:
+- tenant 1 has demo document + workflow
+- tenant 2 has separate demo document + workflow
+- isolation can be shown immediately
