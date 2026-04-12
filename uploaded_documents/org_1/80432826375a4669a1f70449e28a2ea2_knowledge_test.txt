@@ -1,2 +1,0 @@
-Valqeron bronze plan includes dashboard access, workflow history, and document upload.
-Priority support is available on the gold plan.
