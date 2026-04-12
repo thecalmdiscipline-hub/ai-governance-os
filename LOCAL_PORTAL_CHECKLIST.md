@@ -92,3 +92,13 @@ Expected:
 - local admin exists
 - password reset to Admin123!
 - login works again
+
+## Reset local portal state
+Run:
+./scripts/reset_local_portal_state.sh
+
+Expected:
+- admin login reset
+- documents cleaned
+- workflow runs cleaned
+- audit logs cleaned
