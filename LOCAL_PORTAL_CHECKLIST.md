@@ -102,3 +102,15 @@ Expected:
 - documents cleaned
 - workflow runs cleaned
 - audit logs cleaned
+
+## Customer 2 tenant check
+Run:
+./scripts/create_local_customer_2.sh
+./scripts/smoke_customer2_portal.sh
+
+Expected:
+- customer2 can log in
+- customer2 can upload own document
+- customer2 can run own workflow
+- customer2 sees only own data
+- cleanup succeeds
