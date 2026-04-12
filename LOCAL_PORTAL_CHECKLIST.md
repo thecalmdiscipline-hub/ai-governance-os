@@ -114,3 +114,14 @@ Expected:
 - customer2 can run own workflow
 - customer2 sees only own data
 - cleanup succeeds
+
+## Customer 2 status export
+Run:
+./scripts/export_customer2_status.sh
+
+Expected files:
+- status_export_customer2/token_length.txt
+- status_export_customer2/documents.json
+- status_export_customer2/workflows_dashboard.json
+- status_export_customer2/workflows_history.json
+- status_export_customer2/audit.json
