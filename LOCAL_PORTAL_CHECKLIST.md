@@ -135,3 +135,15 @@ Expected:
 - customer2 tenant works
 - both smoke flows complete
 - both export flows complete
+
+## Demo users
+See:
+DEMO_USERS.md
+
+## Open customer2 demo
+Run:
+./scripts/open_customer2_portal.sh
+
+Expected:
+- browser opens
+- customer2 can log in with own tenant account
