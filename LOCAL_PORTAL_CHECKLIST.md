@@ -83,3 +83,12 @@ Expected files:
 ## Stop
 Run:
 ./scripts/stop_local_portal.sh
+
+## Recover admin login
+Run:
+./scripts/reset_local_admin.sh
+
+Expected:
+- local admin exists
+- password reset to Admin123!
+- login works again
