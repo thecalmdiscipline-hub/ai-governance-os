@@ -18,5 +18,5 @@ def run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    result = run_workflow("meeting_agenda_assistant", {"input": body.input, "context": body.context, "user": current_user.username}, user_id=current_user.id)
+    result = run_workflow("meeting_agenda_assistant", {"input": body.input, "context": body.context, "user": current_user.username}, user_id=current_user.id, org_id=current_user.organization_id)
     return result

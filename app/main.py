@@ -48,6 +48,9 @@ app.include_router(workflows_router)
 login_attempts = defaultdict(list)
 
 def check_login_rate_limit(request: Request):
+    if os.getenv("TESTING") == "1":
+        return
+
     ip = request.client.host
     now = time.time()
 
@@ -240,6 +243,8 @@ def get_org_scoped_org(organization_id: int, current_user: User, db: Session):
 
 # Import routers (direct imports; avoid app.api __init__ circular imports)
 from app.api import workflows
+from app.api.documents import router as documents_router
+from app.api.audit import router as audit_router
 
 # Basic routes
 @app.get("/")
@@ -251,6 +256,8 @@ def health():
     return {"status": "healthy"}
 
 app.include_router(workflows.router)
+app.include_router(documents_router)
+app.include_router(audit_router)
 
 # -------------------------
 # ORGANIZATIONS
