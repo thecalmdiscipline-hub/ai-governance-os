@@ -125,3 +125,13 @@ Expected files:
 - status_export_customer2/workflows_dashboard.json
 - status_export_customer2/workflows_history.json
 - status_export_customer2/audit.json
+
+## Full multi-tenant smoke
+Run:
+./scripts/smoke_multi_tenant.sh
+
+Expected:
+- local admin tenant works
+- customer2 tenant works
+- both smoke flows complete
+- both export flows complete
