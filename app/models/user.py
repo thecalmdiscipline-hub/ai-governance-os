@@ -12,6 +12,7 @@ class User(Base):
     role = Column(String, nullable=False)  # admin / auditor / operator
     organization_id = Column(Integer, ForeignKey("organizations.id"))
     is_super_admin = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True, nullable=False)
 
     organization = relationship("Organization")
 

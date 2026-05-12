@@ -54,7 +54,7 @@ def get_current_user(
 
 def require_role(required_role: str) -> Callable:
     def role_checker(current_user: User = Depends(get_current_user)):
-        if current_user.role != required_role:
+        if not current_user.is_super_admin and current_user.role != required_role:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user
 
@@ -62,10 +62,10 @@ def require_role(required_role: str) -> Callable:
 
 
 def get_org_scoped_org(organization_id: int, current_user: User, db: Session):
-    org = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.id == current_user.organization_id,
-    ).first()
+    q = db.query(Organization).filter(Organization.id == organization_id)
+    if not current_user.is_super_admin:
+        q = q.filter(Organization.id == current_user.organization_id)
+    org = q.first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
@@ -91,6 +91,22 @@ def get_org_scoped_risk(risk_id: int, current_user: User, db: Session):
     if not risk:
         raise HTTPException(status_code=404, detail="Risk not found")
     return risk
+
+
+def require_module_access(workflow_key: str) -> Callable:
+    def checker(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        from app.services.module_access import has_workflow_access
+        if not has_workflow_access(current_user, workflow_key, db):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your organization does not have access to the '{workflow_key}' module.",
+            )
+        return current_user
+
+    return checker
 
 
 def get_org_scoped_action(action_id: int, current_user: User, db: Session):

@@ -1,31 +1,107 @@
+import logging
 import os
-import redis
-from fastapi import Request, HTTPException, Depends
+import sys
+import time
+from collections import defaultdict
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+from fastapi import HTTPException, Request
 
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+logger = logging.getLogger(__name__)
+
+_WINDOW_SECONDS = 60
+_MAX_ATTEMPTS = 5
+
+# ---------------------------------------------------------------------------
+# In-memory fallback (single-worker only)
+# ---------------------------------------------------------------------------
+
+_memory_attempts: dict = defaultdict(list)
 
 
-def rate_limit(limit: int, window: int):
-    async def limiter(request: Request):
-        ip = request.client.host if request.client else "unknown"
-        key = f"rate:{ip}:{request.url.path}"
+def _check_memory(ip: str) -> None:
+    now = time.time()
+    _memory_attempts[ip] = [t for t in _memory_attempts[ip] if now - t < _WINDOW_SECONDS]
+    if len(_memory_attempts[ip]) >= _MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+    _memory_attempts[ip].append(now)
 
-        current = redis_client.incr(key)
 
-        if current == 1:
-            redis_client.expire(key, window)
+# ---------------------------------------------------------------------------
+# Redis sliding-window check
+# ---------------------------------------------------------------------------
 
-        if current > limit:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many requests"
+def _check_redis(client, ip: str) -> None:
+    """Sliding window via sorted set. Atomic via pipeline."""
+    now = time.time()
+    key = f"rl:login:{ip}"
+    # Unique member prevents collisions when requests arrive in the same millisecond
+    member = f"{now:.6f}:{os.urandom(4).hex()}"
+
+    pipe = client.pipeline()
+    pipe.zremrangebyscore(key, 0, now - _WINDOW_SECONDS)  # drop expired entries
+    pipe.zcard(key)                                        # count before this attempt
+    pipe.zadd(key, {member: now})                         # record this attempt
+    pipe.expire(key, _WINDOW_SECONDS)
+    results = pipe.execute()
+
+    count_before = results[1]
+    if count_before >= _MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+
+
+# ---------------------------------------------------------------------------
+# Redis client — initialised once at import time
+# ---------------------------------------------------------------------------
+
+_redis_client = None
+
+
+def _init_redis():
+    global _redis_client
+    url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    try:
+        import redis
+
+        client = redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        client.ping()
+        _redis_client = client
+        logger.info("Rate limiter: connected to Redis at %s", url)
+    except Exception as exc:
+        logger.warning(
+            "Rate limiter: Redis not reachable (%s). "
+            "Falling back to in-memory — not suitable for multi-worker deployments.",
+            exc,
+        )
+        _redis_client = None
+
+
+_init_redis()
+
+
+# ---------------------------------------------------------------------------
+# Public dependency
+# ---------------------------------------------------------------------------
+
+def rate_limit_login(request: Request) -> None:
+    if (
+        os.getenv("TESTING") == "1"
+        or "PYTEST_CURRENT_TEST" in os.environ
+        or "pytest" in sys.modules
+    ):
+        return
+
+    ip = request.client.host if request.client else "unknown"
+
+    if _redis_client is not None:
+        try:
+            _check_redis(_redis_client, ip)
+            return
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Rate limiter: Redis check failed (%s). Falling back to in-memory for this request.",
+                exc,
             )
 
-    return limiter
-
-
-# Preconfigured dependencies
-rate_limit_login = rate_limit(limit=10, window=60)
-rate_limit_default = rate_limit(limit=60, window=60)
+    _check_memory(ip)

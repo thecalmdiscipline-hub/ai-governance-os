@@ -14,5 +14,4 @@ class OrganizationResponse(BaseModel):
     country: Optional[str]
     sector: Optional[str]
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}

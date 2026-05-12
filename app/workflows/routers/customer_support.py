@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from app.api.dependencies import get_db, get_current_user, require_module_access
 from app.models.user import User
 from app.workflows.schemas.base import WorkflowRunRequest, WorkflowRunResponse
 from app.workflows.services.runner import run_workflow
 
-router = APIRouter(prefix="/customer-support", tags=["Workflows"])
+router = APIRouter(
+    prefix="/customer-support",
+    tags=["Workflows"],
+    dependencies=[Depends(require_module_access("customer_support"))],
+)
 
 @router.get("/schema")
 def schema():

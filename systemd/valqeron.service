@@ -1,0 +1,51 @@
+# =============================================================================
+# valqeron.service — systemd unit for the Valqeron FastAPI app
+#
+# Install: cp systemd/valqeron.service /etc/systemd/system/valqeron.service
+#          systemctl daemon-reload && systemctl enable --now valqeron
+#
+# Logs:    journalctl -u valqeron -f
+# Status:  systemctl status valqeron
+# =============================================================================
+
+[Unit]
+Description=Valqeron AI Governance OS
+Documentation=https://github.com/YOUR_ORG/ai-governance-os
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+WorkingDirectory=/opt/valqeron
+EnvironmentFile=/opt/valqeron/.env
+
+ExecStart=/opt/valqeron/venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --log-level info \
+    --access-log \
+    --no-use-colors
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=valqeron
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/valqeron
+
+[Install]
+WantedBy=multi-user.target

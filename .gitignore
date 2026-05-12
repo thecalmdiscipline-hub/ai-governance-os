@@ -4,9 +4,11 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Environment
+# Environment — keep .env.example committed as a template
 .env
-.env.*
+.env.local
+.env.production
+.env.staging
 
 # Logs
 logs/
@@ -23,7 +25,4 @@ logs/
 .vscode/
 
 # Virtualenv
-venv/.env
 venv/
-venv/
-.env
