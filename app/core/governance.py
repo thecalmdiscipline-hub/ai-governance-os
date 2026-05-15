@@ -14,15 +14,20 @@ def enforce_production_integrity(db, system, user):
         AIRisk.is_deleted == False
     ).all()
 
+    risk_ids = [r.id for r in high_risks]
+    closed_risk_ids = {
+        row.ai_risk_id
+        for row in db.query(CorrectiveAction.ai_risk_id)
+        .filter(
+            CorrectiveAction.ai_risk_id.in_(risk_ids),
+            CorrectiveAction.status == "closed",
+        )
+        .all()
+    }
+
     for risk in high_risks:
-
-        action = db.query(CorrectiveAction).filter(
-            CorrectiveAction.ai_risk_id == risk.id,
-            CorrectiveAction.status == "closed"
-        ).first()
-
         # Open high risk
-        if not action:
+        if risk.id not in closed_risk_ids:
             system.lifecycle_stage = "restricted"
             db.commit()
 

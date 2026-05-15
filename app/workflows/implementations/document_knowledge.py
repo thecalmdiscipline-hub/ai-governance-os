@@ -116,7 +116,10 @@ def _fallback_answer(reason: str, doc_snippets: List[Dict], top_sources: List[st
 def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any]:
     input_data = payload.get("input", {}) or {}
     context = payload.get("context", {}) or {}
-    user = payload.get("user")
+
+    # org_id is always injected by the workflow runner from current_user.organization_id
+    # (see app/workflows/services/runner.py). It is never read from user-controlled input,
+    # preventing cross-tenant document access.
     org_id = payload.get("org_id")
 
     question = (
@@ -128,13 +131,6 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
     explicit_doc_refs = _to_list(input_data.get("documents") or context.get("documents"))
     query_id = f"DK-{uuid4().hex[:10].upper()}"
-
-    received = {
-        "input": input_data,
-        "context": context,
-        "user": user,
-        "org_id": org_id,
-    }
 
     # Load document metadata from DB
     auto_selected = False
@@ -178,7 +174,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
                 "document_snippets": doc_snippets,
                 "auto_selected_documents": auto_selected,
             },
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -194,7 +190,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
                 "document_snippets": [],
                 "auto_selected_documents": auto_selected,
             },
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -207,7 +203,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             "query_id": query_id,
             "answer": _fallback_answer("OPENAI_API_KEY not configured", doc_snippets, top_sources, auto_selected),
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -257,7 +253,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             },
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -286,6 +282,5 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         "query_id": query_id,
         "answer": _fallback_answer(reason, doc_snippets, top_sources, auto_selected),
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }

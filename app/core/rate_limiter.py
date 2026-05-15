@@ -67,12 +67,19 @@ def _init_redis():
         _redis_client = client
         logger.info("Rate limiter: connected to Redis at %s", url)
     except Exception as exc:
+        _redis_client = None
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env == "production":
+            sys.exit(
+                f"FATAL: Redis is required in production but is not reachable: {exc}\n"
+                "Set REDIS_URL to a reachable Redis instance, "
+                "or set ENVIRONMENT=development for local use."
+            )
         logger.warning(
             "Rate limiter: Redis not reachable (%s). "
             "Falling back to in-memory — not suitable for multi-worker deployments.",
             exc,
         )
-        _redis_client = None
 
 
 _init_redis()

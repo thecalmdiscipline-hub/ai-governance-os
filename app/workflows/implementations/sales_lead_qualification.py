@@ -65,41 +65,95 @@ If critical information is missing, reflect that as a weakness and factor it int
 """
 
 
-def _build_user_message(inp: Dict[str, Any]) -> str:
-    lead = inp.get("lead") or {}
+_PAYLOAD_META_KEYS = {"user", "context", "org_id", "lead", "input", "source", "channel"}
+
+
+def _build_user_message(inp: Dict[str, Any], payload: Dict[str, Any]) -> str:
+    lead = inp.get("lead") or payload.get("lead") or {}
+
+    # Search lead dict → inp dict → payload root (handles all nesting variants)
+    def _get(key: str) -> Any:
+        return lead.get(key) or inp.get(key) or payload.get(key)
+
     parts: List[str] = ["Lead information:"]
 
     fields = [
-        ("Company", lead.get("company")),
-        ("Contact name", lead.get("name")),
-        ("Job title", lead.get("title")),
-        ("Email", lead.get("email")),
-        ("Industry", lead.get("industry")),
-        ("Annual revenue", lead.get("revenue")),
-        ("Employees", lead.get("employees")),
-        ("Website", lead.get("website")),
-        ("Lead source", inp.get("source") or inp.get("channel")),
-        ("Pain points / use case", lead.get("pain_points")),
+        ("Company", _get("company")),
+        ("Contact name", _get("name")),
+        ("Job title", _get("title")),
+        ("Email", _get("email")),
+        ("Industry", _get("industry")),
+        ("Annual revenue", _get("revenue")),
+        ("Employees", _get("employees")),
+        ("Website", _get("website")),
+        ("Lead source", _get("source") or _get("channel")),
+        ("Pain points / use case", _get("pain_points")),
     ]
 
     for label, value in fields:
         if value:
             parts.append(f"  {label}: {value}")
 
-    if len(parts) == 1:
+    # Merge all available data layers and send as raw JSON so the model sees
+    # everything regardless of nesting — this is the authoritative data block.
+    merged: Dict[str, Any] = {}
+    for layer in (payload, inp, lead):
+        for k, v in layer.items():
+            if k not in _PAYLOAD_META_KEYS and v is not None and v != "":
+                merged[k] = v
+
+    if merged:
+        parts.append(
+            f"\nComplete input data (JSON):\n"
+            f"{json.dumps(merged, ensure_ascii=False, indent=2)}"
+        )
+    elif len(parts) == 1:
         parts.append("  (no lead details provided)")
 
+    logger.debug("sales_lead_qualification: user message built:\n%s", "\n".join(parts))
     return "\n".join(parts)
 
 
+def _parse_score(raw: Any) -> int:
+    """Safely parse score from LLM output.
+
+    Handles: int, float, string, null/None.
+    LLMs occasionally return 0.85 instead of 85 — values ≤ 1.0 are scaled up.
+    Falls back to 50 if the value is missing or unparseable.
+    """
+    if raw is None:
+        logger.warning("sales_lead_qualification: score field is null — defaulting to 50")
+        return 50
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning("sales_lead_qualification: could not parse score %r — defaulting to 50", raw)
+        return 50
+    if 0.0 < value <= 1.0:
+        # LLM returned a 0-1 decimal instead of 0-100 integer
+        logger.warning(
+            "sales_lead_qualification: score %r looks like a 0-1 decimal — scaling to %d",
+            raw, round(value * 100),
+        )
+        value = value * 100
+    return max(0, min(100, round(value)))
+
+
+def _qualify(score: int) -> str:
+    if score >= 80:
+        return "qualified"
+    if score >= 50:
+        return "needs_nurturing"
+    return "unqualified"
+
+
 def _parse_llm_response(content: str) -> Dict[str, Any]:
+    logger.debug("sales_lead_qualification: raw LLM response: %s", content)
     data = json.loads(content)
 
-    score = max(0, min(100, int(data.get("score", 50))))
-
-    qualification = data.get("qualification", "needs_nurturing")
-    if qualification not in {"qualified", "needs_nurturing", "unqualified"}:
-        qualification = "needs_nurturing"
+    score = _parse_score(data.get("score"))
+    # Always derive qualification from score — never trust the LLM label directly
+    qualification = _qualify(score)
 
     strengths = data.get("strengths", [])
     if not isinstance(strengths, list):
@@ -145,7 +199,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             "status": "degraded",
             **_fallback_result("OPENAI_API_KEY not configured"),
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": payload,
+
             "user_id": user_id,
         }
 
@@ -153,7 +207,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         import openai
 
         client = openai.OpenAI(api_key=api_key)
-        user_message = _build_user_message(inp)
+        user_message = _build_user_message(inp, payload)
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -181,7 +235,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             **result,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": payload,
+
             "user_id": user_id,
         }
 
@@ -210,6 +264,5 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         "status": "degraded",
         **_fallback_result(reason),
         "degraded_reason": reason,
-        "received": payload,
         "user_id": user_id,
     }

@@ -60,11 +60,22 @@ def get_audit_logs(
 
 
 @router.get("/verify")
-def verify_audit_chain(db: Session = Depends(get_db)):
-    logs = db.query(AuditLog).order_by(AuditLog.id.asc()).all()
+def verify_audit_chain(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.organization_id is None:
+        raise HTTPException(status_code=400, detail="User has no organization")
+
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.organization_id == current_user.organization_id)
+        .order_by(AuditLog.id.asc())
+        .all()
+    )
 
     previous_hash = None
-    expected_id = 1
+    expected_id = logs[0].id if logs else 1
 
     for log in logs:
         if log.id != expected_id:

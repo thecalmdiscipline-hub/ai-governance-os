@@ -135,12 +135,6 @@ def business_intelligence(
 
     question = str(input_data.get("question") or "").strip()
 
-    received = {
-        "input": input_data,
-        "context": context,
-        "user": user,
-        "org_id": org_id,
-    }
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -151,7 +145,7 @@ def business_intelligence(
             "insights": insights,
             "summary": insights["summary"],
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -189,7 +183,7 @@ def business_intelligence(
             "summary": insights["summary"],
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -219,7 +213,6 @@ def business_intelligence(
         "insights": insights,
         "summary": insights["summary"],
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }
 

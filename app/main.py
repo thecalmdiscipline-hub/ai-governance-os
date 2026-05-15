@@ -42,6 +42,16 @@ if len(_secret_key) < 32:
         "Minimum 32 characters required."
     )
 
+_audit_secret = os.getenv("AUDIT_SECRET_KEY", "").strip()
+
+if not _audit_secret:
+    sys.exit(
+        "FATAL: AUDIT_SECRET_KEY is not configured.\n"
+        "Audit chain integrity requires a secret key for HMAC signing.\n"
+        "Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\"\n"
+        "Then add AUDIT_SECRET_KEY=<generated_value> to your .env file."
+    )
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",

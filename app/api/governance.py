@@ -142,13 +142,19 @@ def iso_governance_score(
     effective_high = 0
     aged_high = 0
 
-    for risk in high_risks:
-        action = db.query(CorrectiveAction).filter(
-            CorrectiveAction.ai_risk_id == risk.id,
+    risk_ids = [r.id for r in high_risks]
+    closed_risk_ids = {
+        row.ai_risk_id
+        for row in db.query(CorrectiveAction.ai_risk_id)
+        .filter(
+            CorrectiveAction.ai_risk_id.in_(risk_ids),
             CorrectiveAction.status == "closed",
-        ).first()
+        )
+        .all()
+    }
 
-        if not action:
+    for risk in high_risks:
+        if risk.id not in closed_risk_ids:
             effective_high += 1
             if risk.created_at and risk.created_at < datetime.utcnow() - timedelta(days=30):
                 aged_high += 1
@@ -340,13 +346,19 @@ def update_ai_system_governance(
                     detail="Separation of duties violation. Approver cannot deploy.",
                 )
 
-        for risk in high_risks:
-            action = db.query(CorrectiveAction).filter(
-                CorrectiveAction.ai_risk_id == risk.id,
+        hr_ids = [r.id for r in high_risks]
+        closed_hr_ids = {
+            row.ai_risk_id
+            for row in db.query(CorrectiveAction.ai_risk_id)
+            .filter(
+                CorrectiveAction.ai_risk_id.in_(hr_ids),
                 CorrectiveAction.status == "closed",
-            ).first()
+            )
+            .all()
+        }
 
-            if not action:
+        for risk in high_risks:
+            if risk.id not in closed_hr_ids:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Open high risk '{risk.title}' requires closed corrective action before production",
@@ -448,12 +460,18 @@ def production_readiness_check(
 
     open_high = 0
     aged_high = 0
-    for risk in high_risks:
-        action = db.query(CorrectiveAction).filter(
-            CorrectiveAction.ai_risk_id == risk.id,
+    pr_ids = [r.id for r in high_risks]
+    closed_pr_ids = {
+        row.ai_risk_id
+        for row in db.query(CorrectiveAction.ai_risk_id)
+        .filter(
+            CorrectiveAction.ai_risk_id.in_(pr_ids),
             CorrectiveAction.status == "closed",
-        ).first()
-        if not action:
+        )
+        .all()
+    }
+    for risk in high_risks:
+        if risk.id not in closed_pr_ids:
             open_high += 1
         if risk.created_at and risk.created_at < datetime.utcnow() - timedelta(days=30):
             aged_high += 1

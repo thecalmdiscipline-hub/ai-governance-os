@@ -10,15 +10,18 @@ load_dotenv()
 AUDIT_SECRET = os.getenv("AUDIT_SECRET_KEY")
 
 
-def generate_hmac_signature(data_string: str):
-    if AUDIT_SECRET:
-        return hmac.new(
-            AUDIT_SECRET.encode(),
-            data_string.encode(),
-            hashlib.sha256
-        ).hexdigest()
-
-    return hashlib.sha256(data_string.encode()).hexdigest()
+def generate_hmac_signature(data_string: str) -> str:
+    if not AUDIT_SECRET:
+        raise RuntimeError(
+            "AUDIT_SECRET_KEY is not configured. "
+            "Audit chain integrity cannot be guaranteed without a secret key. "
+            "Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    return hmac.new(
+        AUDIT_SECRET.encode(),
+        data_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def create_audit_log(

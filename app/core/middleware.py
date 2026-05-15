@@ -24,7 +24,7 @@ def setup_middleware(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=_get_allowed_origins(),
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 

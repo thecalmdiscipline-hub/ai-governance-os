@@ -26,4 +26,4 @@ class AISystemUpdate(BaseModel):
     lifecycle_stage: Optional[str] = None
     conformity_assessed: Optional[bool] = None
     last_reviewed_at: Optional[datetime] = None
-    reason: str
+    reason: Optional[str] = None

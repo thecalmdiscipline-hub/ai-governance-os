@@ -164,8 +164,6 @@ def marketing_automation(
     campaign = str(inp.get("campaign") or "").strip() or "default_campaign"
     audience = str(inp.get("audience") or "").strip() or "broad"
 
-    received = payload
-
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         logger.warning("marketing_automation: OPENAI_API_KEY not set — returning degraded response")
@@ -174,7 +172,7 @@ def marketing_automation(
             "status": "degraded",
             **result,
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -210,7 +208,7 @@ def marketing_automation(
             **result,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -239,7 +237,6 @@ def marketing_automation(
         "status": "degraded",
         **result,
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }
 

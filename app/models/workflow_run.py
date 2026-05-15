@@ -10,7 +10,7 @@ class WorkflowRun(Base):
     run_id = Column(String, unique=True, nullable=False, index=True)
     workflow = Column(String, nullable=False, index=True)
 
-    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     status = Column(String, nullable=False, index=True)

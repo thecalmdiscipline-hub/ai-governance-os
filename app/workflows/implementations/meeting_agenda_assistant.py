@@ -216,7 +216,6 @@ def meeting_agenda_assistant(
     participants = _normalise_list(inp.get("participants"))
 
     agenda_id = f"MA-{uuid4().hex[:10].upper()}"
-    received = payload
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -227,7 +226,7 @@ def meeting_agenda_assistant(
             "agenda_id": agenda_id,
             **result,
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -264,7 +263,7 @@ def meeting_agenda_assistant(
             **result,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -294,7 +293,6 @@ def meeting_agenda_assistant(
         "agenda_id": agenda_id,
         **result,
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }
 

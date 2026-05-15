@@ -12,6 +12,6 @@ class CorrectiveAction(Base):
     description = Column(Text, nullable=False)
     status = Column(String, default="open")  # open / in_progress / closed
 
-    ai_risk_id = Column(Integer, ForeignKey("ai_risks.id"))
+    ai_risk_id = Column(Integer, ForeignKey("ai_risks.id"), index=True)
 
-    ai_risk = relationship("AIRisk")
+    ai_risk = relationship("AIRisk", back_populates="corrective_actions")

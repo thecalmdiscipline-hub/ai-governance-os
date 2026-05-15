@@ -185,13 +185,6 @@ def invoice_processing(
     context = payload.get("context", {}) or {}
     user = payload.get("user")
 
-    received = {
-        "input": input_data,
-        "context": context,
-        "user": user,
-        "org_id": org_id,
-    }
-
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         logger.warning("invoice_processing: OPENAI_API_KEY not set — returning degraded response")
@@ -199,7 +192,7 @@ def invoice_processing(
             "status": "degraded",
             **_fallback_result(invoice_text, "OPENAI_API_KEY not configured"),
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -236,7 +229,7 @@ def invoice_processing(
             **result,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -264,7 +257,6 @@ def invoice_processing(
         "status": "degraded",
         **_fallback_result(invoice_text, reason),
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }
 

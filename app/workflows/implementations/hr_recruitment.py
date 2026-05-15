@@ -165,12 +165,6 @@ def hr_recruitment(
     candidate_name = str(input_data.get("candidate_name") or "").strip()
     role = str(input_data.get("role") or "").strip()
 
-    received = {
-        "input": input_data,
-        "context": context,
-        "user": user,
-        "org_id": org_id,
-    }
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -181,7 +175,7 @@ def hr_recruitment(
             "candidates": [candidate] if (candidate_name or role) else [],
             "summary": candidate["summary"],
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -219,7 +213,7 @@ def hr_recruitment(
             "summary": candidate["summary"],
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -249,7 +243,6 @@ def hr_recruitment(
         "candidates": [candidate] if (candidate_name or role) else [],
         "summary": candidate["summary"],
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }
 

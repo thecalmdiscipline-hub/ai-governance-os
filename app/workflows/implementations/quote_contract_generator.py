@@ -233,8 +233,6 @@ def quote_contract_generator(
     quote_id = f"Q-{uuid4().hex[:10].upper()}"
     contract_id = f"C-{uuid4().hex[:10].upper()}"
 
-    received = {"input": inp, "context": context, "user": user}
-
     base_output = {
         "quote_id": quote_id,
         "contract_id": contract_id,
@@ -249,7 +247,6 @@ def quote_contract_generator(
             "valid_days": valid_days,
             "valid_until": valid_until,
         },
-        "received": received,
         "user_id": user_id,
     }
 

@@ -106,12 +106,6 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
     issue = str(input_data.get("issue") or input_data.get("ping") or "").strip()
     ticket_id = f"CS-{uuid4().hex[:10].upper()}"
 
-    received = {
-        "input": input_data,
-        "context": context,
-        "user": user,
-    }
-
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         logger.warning("customer_support: OPENAI_API_KEY not set — returning degraded response")
@@ -120,7 +114,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             "ticket_id": ticket_id,
             "triage": _fallback_triage(issue, "OPENAI_API_KEY not configured"),
             "degraded_reason": "OPENAI_API_KEY not configured",
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -156,7 +150,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             "triage": triage,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
-            "received": received,
+
             "user_id": user_id,
         }
 
@@ -185,6 +179,5 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         "ticket_id": ticket_id,
         "triage": _fallback_triage(issue, reason),
         "degraded_reason": reason,
-        "received": received,
         "user_id": user_id,
     }

@@ -18,6 +18,7 @@ class AIRisk(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    ai_system_id = Column(Integer, ForeignKey("ai_systems.id"))
+    ai_system_id = Column(Integer, ForeignKey("ai_systems.id"), index=True)
 
     ai_system = relationship("AISystem", back_populates="risks")
+    corrective_actions = relationship("CorrectiveAction", back_populates="ai_risk")
