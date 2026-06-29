@@ -14,3 +14,8 @@ from .contact_submission import ContactSubmission
 
 from app.models.microsoft_document import MicrosoftDocument
 from app.models.tenant_module import TenantModule
+
+# Outbound Engine models
+from app.outbound.models.company import OutboundCompany
+from app.outbound.models.prospect import OutboundProspect
+from app.outbound.models.campaign import OutboundCampaign

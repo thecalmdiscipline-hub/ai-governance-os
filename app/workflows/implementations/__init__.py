@@ -1,6 +1,6 @@
 from .customer_support import run as customer_support_run
 from .document_knowledge import run as document_knowledge_run
-from .sales_lead_qualification import sales_lead_qualification_run
+from .sales_lead_qualification import run as sales_lead_qualification_run
 from .quote_contract_generator import quote_contract_generator
 from .meeting_agenda_assistant import meeting_agenda_assistant
 from .marketing_automation import marketing_automation
