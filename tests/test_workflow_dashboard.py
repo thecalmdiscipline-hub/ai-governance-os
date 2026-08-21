@@ -19,11 +19,16 @@ def make_token():
 def test_workflow_dashboard_returns_frontend_payload():
     token = make_token()
 
+    # Org 1 (dennis_admin) does not have customer_support_ai activated in
+    # test.db — that's intentional ambient state, asserted as the negative
+    # case in test_modules_endpoint.py. document-knowledge is a module org 1
+    # does have (document_intelligence), so it exercises a real run without
+    # mutating shared tenant-module state that other tests depend on.
     run_res = client.post(
-        "/workflows/customer-support/run",
+        "/workflows/document-knowledge/run",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "input": {"issue": "dashboard test", "priority": "medium"},
+            "input": {"question": "dashboard test"},
             "context": {},
         },
     )

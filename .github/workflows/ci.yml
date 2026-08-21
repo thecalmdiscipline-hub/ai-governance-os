@@ -31,5 +31,12 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          # Not a real key. Workflow implementations only check `if not
+          # api_key` before calling the OpenAI SDK; the actual client is
+          # mocked in tests/conftest.py (autouse fixture), so no network
+          # call is ever made. This just needs to be a non-empty string so
+          # the workflow tests take the "ok" code path instead of the
+          # "OPENAI_API_KEY not configured" degraded path.
+          OPENAI_API_KEY: "sk-test-ci-mocked-not-a-real-key"
         run: |
           pytest -q -m "not codex"

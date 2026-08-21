@@ -1,7 +1,18 @@
 from app.workflows.implementations.business_intelligence import business_intelligence
+from tests.conftest import mock_openai_response
 
 
-def test_business_intelligence_returns_insights():
+def test_business_intelligence_returns_insights(monkeypatch):
+    mock_openai_response(monkeypatch, {
+        "focus_area": "sales",
+        "summary": "Sales performance is trending positively this quarter with strong pipeline coverage.",
+        "kpis": ["Win rate", "Average deal size", "Sales cycle length"],
+        "recommendations": ["Focus on top-of-funnel lead quality", "Shorten follow-up cadence"],
+        "priority_level": "medium",
+        "action_items": ["Review pipeline with sales team"],
+        "risks": ["Pipeline concentration in few large deals"],
+    })
+
     result = business_intelligence(
         {
             "input": {

@@ -19,11 +19,14 @@ def make_token():
 def test_workflow_run_card_contains_input_output():
     token = make_token()
 
+    # See test_workflow_dashboard.py — org 1 (dennis_admin) intentionally
+    # lacks customer_support_ai in test.db; document-knowledge is a module
+    # it does have active.
     run_res = client.post(
-        "/workflows/customer-support/run",
+        "/workflows/document-knowledge/run",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "input": {"issue": "card test", "priority": "high"},
+            "input": {"question": "card test"},
             "context": {},
         },
     )

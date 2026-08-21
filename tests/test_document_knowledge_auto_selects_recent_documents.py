@@ -1,24 +1,17 @@
 from app.workflows.services.runner import run_workflow
-from app.db.session import SessionLocal
-from app.models.document import Document
+from tests.conftest import ensure_document
 
 
 def test_document_knowledge_auto_selects_recent_documents():
-    db = SessionLocal()
-    try:
-        doc = Document(
-            organization_id=1,
-            uploaded_by_user_id=1,
-            filename="auto_doc.txt",
-            stored_name="auto_doc.txt",
-            path="uploaded_documents/org_1/auto_doc.txt",
-            content_type="text/plain",
-            size=24,
-        )
-        db.add(doc)
-        db.commit()
-    finally:
-        db.close()
+    ensure_document(
+        organization_id=1,
+        uploaded_by_user_id=1,
+        filename="auto_doc.txt",
+        stored_name="auto_doc.txt",
+        path="uploaded_documents/org_1/auto_doc.txt",
+        content_type="text/plain",
+        size=24,
+    )
 
     result = run_workflow(
         "document_knowledge",
