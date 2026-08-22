@@ -18,6 +18,17 @@ typing_extensions==4.15.0
 uvicorn==0.39.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# passlib 1.7.4 (last released 2020) probes bcrypt's internal API to detect
+# its version; bcrypt>=4.1 removed the attribute it looks for
+# (__about__.__version__), which makes every hash/verify call raise
+# "password cannot be longer than 72 bytes" regardless of the actual input —
+# a red herring from passlib's own self-test using a fixed dummy secret, not
+# a real length problem. Pin bcrypt to the last version passlib 1.7.4
+# actually works with. Without this pin, a fresh `pip install` picks
+# whatever bcrypt is newest at install time and silently breaks all
+# password hashing (login, user creation) — this was never caught locally
+# because dev environments happened to already have bcrypt==4.0.1 installed.
+bcrypt==4.0.1
 redis==5.0.8
 python-multipart==0.0.20
 httpx==0.28.1

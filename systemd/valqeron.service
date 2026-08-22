@@ -10,9 +10,11 @@
 
 [Unit]
 Description=Valqeron AI Governance OS
-Documentation=https://github.com/YOUR_ORG/ai-governance-os
+Documentation=https://github.com/thecalmdiscipline-hub/ai-governance-os
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -33,8 +35,6 @@ ExecStart=/opt/valqeron/venv/bin/uvicorn app.main:app \
 # Restart policy
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # Logging
 StandardOutput=journal
