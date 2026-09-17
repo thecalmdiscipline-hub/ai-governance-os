@@ -109,12 +109,18 @@ const valuePoints = [
   "Controlled growth across functions",
 ];
 
+// Pricing below matches the authoritative pricing model (in effect through end of 2026),
+// confirmed 2026-09-13 as the source of truth over the previous placeholder numbers that
+// were live here (unchanged since the 2026-05-15 analysis, never reconciled with the real
+// business model). 12-month term; month-to-month available at a +20% surcharge (not yet
+// reflected in this copy — flagged for a future pass, not added here to keep this change
+// to numbers/workflow-list only). Prices exclude VAT.
 const pricingPackages = [
   {
     tier: "Starter",
     description: "For small companies starting with AI implementation.",
-    fee: "€4,500 setup + €1,250/month",
-    note: "Workflows are priced separately.",
+    fee: "€3,999 setup + €1,299/month",
+    note: "Minimum 2 paid workflows.",
     ctaLabel: "Discuss Starter",
     ctaStyle: "secondary",
   },
@@ -122,8 +128,8 @@ const pricingPackages = [
     tier: "Business",
     description:
       "For companies with €1M+ revenue that want operational automation and measurable ROI.",
-    fee: "€8,500 setup + €2,500/month",
-    note: "Minimum 3 paid workflows.",
+    fee: "From €7,999 setup + from €2,199/month",
+    note: "Minimum 5 paid workflows. Compliance Monitoring AI included.",
     recommended: true,
     ctaLabel: "Book a demo",
     ctaStyle: "primary",
@@ -132,78 +138,72 @@ const pricingPackages = [
     tier: "Enterprise",
     description:
       "For larger organizations with scale, compliance, governance, and integration needs.",
-    fee: "From €15,000 setup + from €5,000/month",
-    note: "Minimum 5 paid workflows.",
+    fee: "From €11,999 setup + from €3,499/month",
+    note: "Minimum 7 paid workflows. Compliance Monitoring AI included. Unlimited runs and users.",
     ctaLabel: "Request proposal",
     ctaStyle: "secondary",
   },
 ];
 
+// The three previously listed here — Full Document Audit AI, Governance & Risk AI,
+// ISO / EU AI Act Layer — do not exist as implemented workflows (no matching
+// `workflow_key` in app/workflows/implementations/). Removed from live pricing on
+// 2026-09-13 per Dennis; parked as a future-build idea rather than deleted from the
+// product roadmap. Bands below (Licht/Standaard/Geavanceerd) match the authoritative
+// pricing model's real 10 workflows.
 const workflowPricing = [
+  // Licht — from €595/month
   {
     name: "Document Knowledge AI",
-    price: "€950–€1,750/month",
+    price: "From €595/month",
     benefit: "Turn document libraries into searchable knowledge.",
   },
   {
-    name: "Full Document Audit AI",
-    price: "€1,500–€3,000/month",
-    benefit: "Audit complex documents with traceable output.",
+    name: "Meeting Assistant AI",
+    price: "From €595/month",
+    benefit: "Capture decisions and next steps.",
+  },
+  // Standaard — from €1,045/month
+  {
+    name: "Invoice Processing AI",
+    price: "From €1,045/month",
+    benefit: "Reduce AP workload with validation.",
   },
   {
+    name: "HR Recruitment AI",
+    price: "From €1,045/month",
+    benefit: "Screen candidates with structured summaries.",
+  },
+  {
+    name: "Marketing Automation AI",
+    price: "From €1,045/month",
+    benefit: "Launch campaigns with compliance guardrails.",
+  },
+  {
+    name: "Quote & Contract AI",
+    price: "From €1,045/month",
+    benefit: "Speed quotes with governed contract logic.",
+  },
+  // Geavanceerd — from €1,725/month
+  {
     name: "Customer Support AI",
-    price: "€2,000–€5,000/month",
+    price: "From €1,725/month",
     benefit: "Deflect tickets with controlled responses.",
   },
   {
     name: "Sales Qualification AI",
-    price: "€1,750–€4,500/month",
+    price: "From €1,725/month",
     benefit: "Prioritize inbound leads with clear scoring.",
   },
   {
-    name: "Quote & Contract AI",
-    price: "€2,000–€5,000/month",
-    benefit: "Speed quotes with governed contract logic.",
-  },
-  {
-    name: "Invoice Processing AI",
-    price: "€1,500–€4,000/month",
-    benefit: "Reduce AP workload with validation.",
-  },
-  {
-    name: "Marketing Automation AI",
-    price: "€1,500–€4,000/month",
-    benefit: "Launch campaigns with compliance guardrails.",
-  },
-  {
     name: "Business Intelligence AI",
-    price: "€2,500–€6,000/month",
+    price: "From €1,725/month",
     benefit: "Surface executive insights with lineage.",
   },
   {
-    name: "HR Recruitment AI",
-    price: "€1,500–€4,000/month",
-    benefit: "Screen candidates with structured summaries.",
-  },
-  {
-    name: "Meeting Assistant AI",
-    price: "€750–€2,000/month",
-    benefit: "Capture decisions and next steps.",
-  },
-  {
     name: "Compliance Monitoring AI",
-    price: "€3,000–€7,500/month",
+    price: "From €1,725/month",
     benefit: "Continuous oversight and policy monitoring.",
-  },
-  {
-    name: "Governance & Risk AI",
-    price: "€3,500–€8,500/month",
-    benefit: "Operational risk signals with accountability.",
-  },
-  {
-    name: "ISO / EU AI Act Layer",
-    price: "€5,000–€12,500/month",
-    benefit: "Compliance layer for regulated deployment.",
   },
 ];
 
