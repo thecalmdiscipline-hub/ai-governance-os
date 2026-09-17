@@ -13,7 +13,8 @@
 #   5. Runs Alembic migrations
 #   6. Runs module seed script
 #   7. Restarts the systemd service
-#   8. Health-checks the app; rolls back code on failure
+#   8. Syncs nginx/sites/*.conf to /etc/nginx/ and reloads nginx if changed
+#   9. Health-checks the app; rolls back code on failure
 #
 # Rollback note: code is reverted via git reset --hard if the health check
 # fails. Database migrations are NOT rolled back automatically — run
@@ -158,7 +159,41 @@ systemctl restart "$SERVICE"
 ok "Service restarted"
 
 # ---------------------------------------------------------------------------
-# Step 7 — Health check
+# Step 7 — Sync Nginx site configs
+#
+# nginx/sites/*.conf lives in the repo but was never synced to
+# /etc/nginx/ by this script — every CSP/header fix needed a manual copy
+# + reload on top of a normal deploy. Idempotent: re-running with no
+# config changes just verifies and skips the reload.
+# ---------------------------------------------------------------------------
+step "Syncing Nginx site configs"
+NGINX_CHANGED=false
+for SITE_FILE in "$PROJECT_DIR"/nginx/sites/*.conf; do
+    [[ -f "$SITE_FILE" ]] || continue
+    domain=$(basename "$SITE_FILE" .conf)
+    DEST="/etc/nginx/sites-available/${domain}"
+    if ! cmp -s "$SITE_FILE" "$DEST" 2>/dev/null; then
+        cp "$SITE_FILE" "$DEST"
+        NGINX_CHANGED=true
+        info "${domain}: config updated"
+    fi
+    ln -sf "$DEST" "/etc/nginx/sites-enabled/${domain}"
+done
+
+if nginx -t; then
+    if $NGINX_CHANGED; then
+        systemctl reload nginx
+        ok "Nginx configs synced and reloaded"
+    else
+        ok "Nginx configs already up to date — no reload needed"
+    fi
+else
+    err "nginx -t failed after syncing configs"
+    rollback
+fi
+
+# ---------------------------------------------------------------------------
+# Step 8 — Health check
 # ---------------------------------------------------------------------------
 step "Health check ($HEALTH_URL)"
 HEALTHY=false

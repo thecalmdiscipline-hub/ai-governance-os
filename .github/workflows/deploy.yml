@@ -1,0 +1,41 @@
+name: Deploy
+
+# Runs after the CI workflow finishes successfully on main, so deploy can
+# never race a failing/still-running test run. workflow_dispatch is for
+# manually testing this workflow (e.g. from a feature branch) before it
+# is trusted to run unattended on every push to main.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "${{ vars.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Start ssh-agent and load deploy key
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" | ssh-add -
+
+      - name: Deploy (git pull + scripts/deploy.sh on the server)
+        run: |
+          ssh -o StrictHostKeyChecking=yes "${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}" \
+            "cd /opt/valqeron && git pull origin main && bash scripts/deploy.sh"
+
+      - name: Verify production health from outside the server
+        run: |
+          curl -sf https://compliance.valqeron.com/health
+          curl -sf https://api.valqeron.com/health
