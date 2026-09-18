@@ -7,7 +7,7 @@ source venv/bin/activate
 python3 - <<'PY'
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.core.security import get_password_hash
+from app.core.security import hash_password
 
 USERNAME = "dennis_admin"
 PASSWORD = "Admin123!"
@@ -21,7 +21,7 @@ user = db.query(User).filter(User.username == USERNAME).first()
 if user is None:
     user = User(
         username=USERNAME,
-        password_hash=get_password_hash(PASSWORD),
+        password_hash=hash_password(PASSWORD),
         role=ROLE,
         organization_id=ORG_ID,
     )
@@ -30,7 +30,7 @@ if user is None:
     db.refresh(user)
     print("CREATED", user.username, user.organization_id, user.role)
 else:
-    user.password_hash = get_password_hash(PASSWORD)
+    user.password_hash = hash_password(PASSWORD)
     user.role = ROLE
     user.organization_id = ORG_ID
     db.commit()
