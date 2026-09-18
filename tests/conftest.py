@@ -198,6 +198,60 @@ def _mock_openai_by_default(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# PII-anonimisering mocking (app/core/pii_anonymizer.py)
+#
+# Every workflow implementation now does
+# `from app.core import pii_anonymizer` and calls
+# `pii_anonymizer.anonymize_text(user_message, workflow=...)` right before
+# the OpenAI call (see CLAUDE.md §5, "Geen AVG-anonimisering vóór
+# LLM-calls"). Real anonymize_text() lazily loads Presidio + two spaCy
+# language models on first use — slow, and not guaranteed to be installed
+# in every environment that runs this test suite. By default we patch it
+# to a fast no-op passthrough so the ~200 existing workflow tests keep
+# running deterministically without needing spaCy models installed.
+#
+# Tests that specifically exercise the anonymizer's own behaviour (see
+# tests/test_pii_anonymizer.py) should NOT rely on this fixture — they
+# either monkeypatch pii_anonymizer.anonymize_text explicitly per-test, or
+# (for the real-detection tests) are skipped when presidio/spacy are not
+# importable.
+#
+# Because every workflow does `from app.core import pii_anonymizer` (module
+# import, not `from ... import anonymize_text`), patching the single
+# attribute on the pii_anonymizer module is enough to affect every workflow
+# — mirroring how `monkeypatch.setattr(openai, "OpenAI", ...)` above works
+# for the OpenAI mock.
+# ---------------------------------------------------------------------------
+
+
+def _identity_anonymize_text(text, workflow=None):
+    return text
+
+
+def mock_pii_unavailable(monkeypatch, message="PII-anonimisering is niet beschikbaar (test)"):
+    """Make the next anonymize_text() call raise PIIAnonymizerUnavailable.
+
+    Use this to assert a workflow's fail-closed behaviour: it must return a
+    "degraded" response and must NEVER fall back to sending unanonymized
+    text to OpenAI.
+    """
+    from app.core import pii_anonymizer
+
+    def _raise(text, workflow=None):
+        raise pii_anonymizer.PIIAnonymizerUnavailable(message)
+
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text", _raise)
+
+
+@pytest.fixture(autouse=True)
+def _mock_pii_anonymizer_by_default(monkeypatch):
+    from app.core import pii_anonymizer
+
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text", _identity_anonymize_text)
+    yield
+
+
+# ---------------------------------------------------------------------------
 # Shared DB fixtures for tests that depend on ambient rows (documents,
 # tenant module activation) rather than creating their own isolated state.
 # ---------------------------------------------------------------------------

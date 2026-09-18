@@ -25,6 +25,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from app.core import pii_anonymizer
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
@@ -160,6 +162,7 @@ def compliance_monitoring(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data, context)
+        user_message = pii_anonymizer.anonymize_text(user_message, workflow="compliance_monitoring")
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -204,6 +207,10 @@ def compliance_monitoring(
     except json.JSONDecodeError as exc:
         logger.error("compliance_monitoring: Failed to parse LLM JSON response: %s", exc)
         return {"status": "degraded", **_fallback_response("LLM returned unparseable response")}
+
+    except pii_anonymizer.PIIAnonymizerUnavailable as exc:
+        logger.error("compliance_monitoring: PII-anonimisering mislukt — LLM-call geblokkeerd: %s", exc)
+        return {"status": "degraded", **_fallback_response(str(exc))}
 
     except Exception as exc:
         logger.error("compliance_monitoring: Unexpected error: %s", exc, exc_info=True)

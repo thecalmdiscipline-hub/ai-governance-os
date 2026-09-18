@@ -26,6 +26,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from app.core import pii_anonymizer
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
@@ -181,6 +183,7 @@ def marketing_automation(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp)
+        user_message = pii_anonymizer.anonymize_text(user_message, workflow="marketing_automation")
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -227,6 +230,10 @@ def marketing_automation(
     except json.JSONDecodeError as exc:
         logger.error("marketing_automation: Failed to parse LLM JSON response: %s", exc)
         reason = "LLM returned unparseable response"
+
+    except pii_anonymizer.PIIAnonymizerUnavailable as exc:
+        logger.error("marketing_automation: PII-anonimisering mislukt — LLM-call geblokkeerd: %s", exc)
+        reason = str(exc)
 
     except Exception as exc:
         logger.error("marketing_automation: Unexpected error: %s", exc, exc_info=True)

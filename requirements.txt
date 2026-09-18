@@ -37,3 +37,36 @@ pydantic-settings==2.11.0
 pypdf==6.10.0
 python-docx==1.2.0
 alembic==1.16.5
+
+# --- AVG-anonimiseringslaag (app/core/pii_anonymizer.py) ---
+# Microsoft Presidio + spaCy NLP-modellen voor NL + EN, gebruikt om
+# persoonsgegevens te detecteren en te vervangen vóór elke OpenAI-call
+# (zie CLAUDE.md §5, risico "Geen AVG-anonimisering vóór LLM-calls").
+# `langdetect` bepaalt de dominante taal van elke tekst zodat NER-detectie
+# (PERSON/LOCATION) met het juiste taalmodel draait — zie de docstring
+# bovenaan pii_anonymizer.py voor waarom dat nodig is.
+#
+# Versions below (2026-09-18, Claude Code) differ from what the handoff
+# originally specified: it verified presidio 2.2.364 + spacy 3.8.16 in a
+# sandbox running Python >=3.10. This repo's actual venv and CI
+# (.github/workflows/ci.yml) both pin Python 3.9, and `pip install` here
+# failed in two successive layers:
+#   1. presidio-analyzer/-anonymizer 2.2.361-2.2.364 all require Python
+#      >=3.10 -> pinned to 2.2.360, the newest version that still supports
+#      3.9 (confirmed via `pip index versions`; presidio-analyzer 2.2.360's
+#      own metadata only requires spacy>=3.4.4,!=3.7.0, so it does not
+#      force a specific spacy line).
+#   2. spacy==3.8.16 itself failed to build: its build dependency
+#      thinc>=8.3.12 also requires Python >=3.10. Downgraded to
+#      spacy==3.7.5 (last 3.7.x release, resolves cleanly on 3.9 with
+#      thinc==8.2.5 per `pip install --dry-run`) and the matching
+#      nl_core_news_lg/en_core_web_lg 3.7.0 model wheels (confirmed to
+#      exist via a HEAD request against the spacy-models GitHub releases;
+#      3.7.0 is the newest version published for both languages — nl has
+#      no 3.7.1/3.7.2 release, only en does).
+presidio-analyzer==2.2.360
+presidio-anonymizer==2.2.360
+spacy==3.7.5
+langdetect==1.0.9
+nl_core_news_lg @ https://github.com/explosion/spacy-models/releases/download/nl_core_news_lg-3.7.0/nl_core_news_lg-3.7.0-py3-none-any.whl
+en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.0/en_core_web_lg-3.7.0-py3-none-any.whl

@@ -28,6 +28,8 @@ from app.db.session import SessionLocal
 from app.models.document import Document
 from app.services.document_reader import read_text_document
 
+from app.core import pii_anonymizer
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
@@ -212,6 +214,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(question, doc_contents)
+        user_message = pii_anonymizer.anonymize_text(user_message, workflow="document_knowledge")
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -272,6 +275,10 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
     except json.JSONDecodeError as exc:
         logger.error("document_knowledge: Failed to parse LLM JSON response: %s", exc)
         reason = "LLM returned unparseable response"
+
+    except pii_anonymizer.PIIAnonymizerUnavailable as exc:
+        logger.error("document_knowledge: PII-anonimisering mislukt — LLM-call geblokkeerd: %s", exc)
+        reason = str(exc)
 
     except Exception as exc:
         logger.error("document_knowledge: Unexpected error: %s", exc, exc_info=True)

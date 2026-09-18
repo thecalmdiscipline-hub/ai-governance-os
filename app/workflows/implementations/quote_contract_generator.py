@@ -39,6 +39,8 @@ from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from app.core import pii_anonymizer
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
@@ -266,6 +268,7 @@ def quote_contract_generator(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp, items, subtotal, total)
+        user_message = pii_anonymizer.anonymize_text(user_message, workflow="quote_contract_generator")
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -312,6 +315,10 @@ def quote_contract_generator(
     except json.JSONDecodeError as exc:
         logger.error("quote_contract_generator: Failed to parse LLM JSON response: %s", exc)
         reason = "LLM returned unparseable response"
+
+    except pii_anonymizer.PIIAnonymizerUnavailable as exc:
+        logger.error("quote_contract_generator: PII-anonimisering mislukt — LLM-call geblokkeerd: %s", exc)
+        reason = str(exc)
 
     except Exception as exc:
         logger.error("quote_contract_generator: Unexpected error: %s", exc, exc_info=True)
