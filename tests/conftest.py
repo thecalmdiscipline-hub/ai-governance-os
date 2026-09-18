@@ -297,3 +297,74 @@ def ensure_document(
         return doc
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Demo-tenant seed data (dennis_admin / customer2_admin)
+#
+# A large share of the suite (workflow summary/history/detail, documents,
+# audit, modules, microsoft routes, tenant-isolation) either builds its own
+# JWT for "dennis_admin"/org_id=1 or logs in via POST /login as
+# "dennis_admin"/"Admin123!" or "customer2_admin"/"Customer123!" (see
+# tests/test_customer2_isolation.py). None of that is self-contained: it
+# has only ever worked because a developer's persistent local test.db
+# already had these two organizations/users in it from a one-off manual
+# setup (see scripts/prepare_demo_state.sh, scripts/create_local_customer_2.sh
+# — both are local-dev-only, hardcoded to a running server on
+# 127.0.0.1:8001, not usable from pytest/CI). A genuinely fresh database —
+# which is exactly what CI's DATABASE_URL=sqlite+pysqlite:///:memory: is —
+# has none of this, so every one of those tests 401s. This fixture creates
+# the same two organizations/users (idempotently, so it's harmless against
+# a developer's already-seeded persistent test.db too) before any test
+# runs, so the suite is no longer silently dependent on unrepeatable local
+# state — discovered and fixed 2026-09-18 while getting real GitHub Actions
+# CI to actually pass for the first time (see CLAUDE.md §6).
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session", autouse=True)
+def _seed_demo_tenants():
+    from app.core.security import hash_password
+    from app.db.session import SessionLocal
+    from app.models.organization import Organization
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        for org_id, org_name in ((1, "Valqeron Demo Tenant 1"), (2, "Valqeron Demo Tenant 2")):
+            if db.query(Organization).filter(Organization.id == org_id).first() is None:
+                db.add(Organization(id=org_id, name=org_name))
+        db.commit()
+
+        for username, password, role, org_id in (
+            ("dennis_admin", "Admin123!", "admin", 1),
+            ("customer2_admin", "Customer123!", "admin", 2),
+        ):
+            if db.query(User).filter(User.username == username).first() is None:
+                db.add(
+                    User(
+                        username=username,
+                        password_hash=hash_password(password),
+                        role=role,
+                        organization_id=org_id,
+                        is_active=True,
+                    )
+                )
+        db.commit()
+    finally:
+        db.close()
+
+    # Module-access grants gate which workflows each org can run (see
+    # app/services/module_access.py) — several tests assert specific
+    # per-org active/inactive modules (e.g. org 1 has document_intelligence
+    # but not customer_support_ai; org 2 is the reverse — see
+    # test_modules_endpoint.py). scripts/seed_modules.py already defines
+    # this exact canonical dataset (the same one used against the
+    # production DB in scripts/deploy.sh) — reused here via its seed()
+    # function rather than duplicating SEED_DATA, so there is one source
+    # of truth instead of two that could quietly drift apart.
+    import importlib
+
+    seed_modules = importlib.import_module("scripts.seed_modules")
+    seed_modules.seed()
+
+    yield

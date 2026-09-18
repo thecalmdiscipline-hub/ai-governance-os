@@ -38,5 +38,14 @@ jobs:
           # the workflow tests take the "ok" code path instead of the
           # "OPENAI_API_KEY not configured" degraded path.
           OPENAI_API_KEY: "sk-test-ci-mocked-not-a-real-key"
+          # Not real secrets — app/main.py refuses to start without these
+          # (fail-fast startup check), which until 2026-09-18 meant CI's
+          # "Run tests" step never actually got past importing app.main.
+          # Any run's JWT/HMAC signatures are worthless outside this
+          # ephemeral CI job anyway (in-memory DB, thrown away when the
+          # job ends), so a fixed dummy value is fine here — never reuse
+          # these for anything that outlives one CI run.
+          SECRET_KEY: "ci-dummy-secret-key-not-for-production-use-0000"
+          AUDIT_SECRET_KEY: "ci-dummy-audit-secret-key-not-for-production-use-0000"
         run: |
           pytest -q -m "not codex"
