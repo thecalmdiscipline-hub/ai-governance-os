@@ -4,13 +4,11 @@
 import logging
 import os
 import sys
-from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -96,10 +94,6 @@ from app.models import (  # noqa: F401
 
 Base.metadata.create_all(bind=engine)
 
-# Static files
-STATIC_DIR = Path(__file__).resolve().parent / "static"
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
 # Routers
 from app.api import workflows as workflows_api
 from app.api.audit import org_audit_router, router as audit_router
@@ -123,16 +117,24 @@ app.include_router(workflows_router)
 app.include_router(workflows_api.router)
 
 # -------------------------
-# Static pages
+# Root — pure API, no marketing page
 # -------------------------
+# Dit domein (en compliance.valqeron.com, dat op dezelfde backend draait) toont
+# bewust geen HTML meer. De marketing-website hoort uitsluitend op
+# www.valqeron.com (los gehost, buiten deze repo) en de klantportal draait
+# als losse static build via nginx op app.valqeron.com (zie
+# nginx/sites/app.valqeron.com.conf) — dit backend-proces bedient alleen nog
+# API-routes. De oude `app/static/index.html`/`app.jsx`-marketingpagina en de
+# bijbehorende `/static`-mount zijn hier bewust ontkoppeld (2026-09-18); de
+# bestanden staan nog in `app/static/` als referentie maar worden nergens
+# meer geserveerd.
 
 @app.get("/", include_in_schema=False)
 def root():
-    return FileResponse(STATIC_DIR / "index.html")
-
-@app.get("/core", include_in_schema=False)
-def core_page():
-    return FileResponse(STATIC_DIR / "index.html")
+    return {
+        "service": os.getenv("APP_NAME", "AI Governance OS"),
+        "status": "ok",
+    }
 
 @app.get("/api/status", include_in_schema=False)
 def api_status():
