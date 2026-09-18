@@ -90,6 +90,47 @@ def test_bsn_validator_rejects_non_digits():
 
 
 # ---------------------------------------------------------------------------
+# NL_PHONE validator — pure structure check, no checksum exists for phone
+# numbers (unlike BSN's 11-proef), so this exercises length/prefix/
+# not-a-trivial-placeholder rules instead. No external dependency.
+# ---------------------------------------------------------------------------
+
+def test_nl_phone_validator_accepts_valid_mobile_number():
+    assert pii_anonymizer._is_valid_nl_phone("0612345678") is True
+
+
+def test_nl_phone_validator_accepts_with_31_country_code():
+    # +31 6 12345678 normalizes (all non-digits stripped) to 31612345678.
+    assert pii_anonymizer._is_valid_nl_phone("31612345678") is True
+
+
+def test_nl_phone_validator_accepts_with_0031_country_code():
+    assert pii_anonymizer._is_valid_nl_phone("0031612345678") is True
+
+
+def test_nl_phone_validator_rejects_wrong_length():
+    assert pii_anonymizer._is_valid_nl_phone("061234567") is False  # 9 digits
+    assert pii_anonymizer._is_valid_nl_phone("06123456789") is False  # 11 digits
+
+
+def test_nl_phone_validator_rejects_non_06_prefix():
+    # A landline-style number (e.g. Amsterdam 020-...) is not a mobile
+    # number and must not be flagged as NL_PHONE.
+    assert pii_anonymizer._is_valid_nl_phone("0201234567") is False
+
+
+def test_nl_phone_validator_rejects_repeated_digit_placeholder():
+    # A common placeholder/test value, not a real number.
+    assert pii_anonymizer._is_valid_nl_phone("0600000000") is False
+
+
+def test_nl_phone_validator_rejects_arbitrary_ten_digit_string():
+    # E.g. a bank account number tail that happens to be 10 digits but
+    # does not start with the mobile trunk prefix "06".
+    assert pii_anonymizer._is_valid_nl_phone("0417164300") is False
+
+
+# ---------------------------------------------------------------------------
 # Blank/empty input short-circuits before touching Presidio at all — this
 # must work even without presidio installed, since it never calls
 # _get_engines().
@@ -116,7 +157,7 @@ def test_invoice_processing_has_a_reduced_entity_set():
     assert "PERSON" not in entities
     assert "LOCATION" not in entities
     # Strong individual identifiers must still be covered.
-    for strong_identifier in ("EMAIL_ADDRESS", "PHONE_NUMBER", "IBAN_CODE", "NL_BSN"):
+    for strong_identifier in ("EMAIL_ADDRESS", "PHONE_NUMBER", "NL_PHONE", "IBAN_CODE", "NL_BSN"):
         assert strong_identifier in entities
 
 
@@ -237,8 +278,40 @@ def test_anonymize_text_redacts_dutch_name_and_email():
 
     assert "Jan de Vries" not in result
     assert "jan.devries@acme.nl" not in result
+    assert "06-12345678" not in result
     assert "<PERSOON>" in result
     assert "<E-MAILADRES>" in result
+    assert "<TELEFOONNUMMER>" in result
+
+
+@requires_presidio
+def test_anonymize_text_redacts_nl_mobile_number_format_variants():
+    """Regressietest voor de NL_PHONE-recognizer (toegevoegd 2026-09-18):
+    Presidio's ingebouwde PHONE_NUMBER-recognizer detecteerde het
+    Nederlandse mobiele formaat niet betrouwbaar — dit dekt de vier
+    gangbare notatievarianten (dash, spatie, geen scheidingsteken,
+    internationaal +31-formaat)."""
+    variants = [
+        "Bel me op 06-12345678 voor meer informatie.",
+        "Bel me op 06 12345678 voor meer informatie.",
+        "Bel me op 0612345678 voor meer informatie.",
+        "Bel me op +31 6 12345678 voor meer informatie.",
+    ]
+    for text in variants:
+        result = pii_anonymizer.anonymize_text(text, workflow="business_intelligence")
+        assert "<TELEFOONNUMMER>" in result, f"phone not redacted for variant: {text!r} -> {result!r}"
+
+
+@requires_presidio
+def test_nl_phone_pattern_does_not_match_inside_an_iban():
+    # The account-number tail of a Dutch IBAN is a 10-digit string too
+    # (NL91ABNA0417164300 -> 0417164300) — must not be misflagged as a
+    # phone number just because it is the right length.
+    text = "IBAN: NL91ABNA0417164300."
+    result = pii_anonymizer.anonymize_text(text, workflow="business_intelligence")
+
+    assert "<TELEFOONNUMMER>" not in result
+    assert "<REKENINGNUMMER>" in result
 
 
 @requires_presidio

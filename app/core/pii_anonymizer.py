@@ -64,6 +64,18 @@ Ontwerpkeuzes:
   - Custom recognizer voor het Nederlandse BSN (burgerservicenummer) met de
     officiële 11-proef als validator, zodat willekeurige 8-9-cijferige
     reeksen niet massaal als BSN worden gemarkeerd (lage false-positive rate).
+  - Custom NL_PHONE-recognizer (toegevoegd 2026-09-18, zelfde ontwerp als
+    NL_BSN hierboven): Presidio's ingebouwde PHONE_NUMBER-recognizer bleek
+    bij productieverificatie het veelgebruikte Nederlandse mobiele formaat
+    "06-12345678" niet betrouwbaar te detecteren met de (Python-3.9-gedwongen
+    oudere) spaCy-modellen. NL_PHONE is een aanvullende, taal-onafhankelijke
+    patroon-recognizer specifiek voor NL-mobiele nummers (06-.../+31 6.../
+    0031 6...), met een structuurvalidator (geen checksum bestaat voor
+    telefoonnummers zoals bij BSN — de validator controleert dat het
+    genormaliseerde nummer op de juiste lengte/prefix uitkomt en geen
+    triviale, herhaalde-cijferreeks is). Draait naast, niet in plaats van,
+    de generieke PHONE_NUMBER-recognizer — beide staan in de entiteitenset,
+    delen dezelfde "<TELEFOONNUMMER>"-placeholder.
   - Vervanging is een simpele "<TYPE>"-placeholder (bijv. "<PERSOON>"), geen
     per-waarde-nummering — voldoende voor de workflows hier, die de
     geanonimiseerde tekst alleen als LLM-input gebruiken en de originele
@@ -98,6 +110,7 @@ _DEFAULT_ENTITIES: List[str] = [
     "PERSON",
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
+    "NL_PHONE",
     "IBAN_CODE",
     "CREDIT_CARD",
     "IP_ADDRESS",
@@ -114,6 +127,7 @@ ENTITY_SETS: Dict[str, List[str]] = {
     "invoice_processing": [
         "EMAIL_ADDRESS",
         "PHONE_NUMBER",
+        "NL_PHONE",
         "IBAN_CODE",
         "CREDIT_CARD",
         "IP_ADDRESS",
@@ -125,6 +139,7 @@ _REPLACEMENTS: Dict[str, str] = {
     "PERSON": "<PERSOON>",
     "EMAIL_ADDRESS": "<E-MAILADRES>",
     "PHONE_NUMBER": "<TELEFOONNUMMER>",
+    "NL_PHONE": "<TELEFOONNUMMER>",
     "IBAN_CODE": "<REKENINGNUMMER>",
     "CREDIT_CARD": "<CREDITCARDNUMMER>",
     "IP_ADDRESS": "<IP-ADRES>",
@@ -189,6 +204,57 @@ def _build_nl_bsn_recognizer():
     )
 
 
+def _is_valid_nl_phone(digits: str) -> bool:
+    """Structuurcontrole voor een Nederlands mobiel telefoonnummer.
+
+    Geen checksum bestaat voor telefoonnummers (in tegenstelling tot BSN's
+    11-proef), dus deze validator controleert in plaats daarvan structuur:
+    na normalisatie van een eventueel landcode-prefix (+31/0031) moet het
+    resultaat exact 10 cijfers zijn en beginnen met "06" (het Nederlandse
+    mobiele-trunkprefix), en mag niet louter uit één herhaald cijfer bestaan
+    (bijv. "0600000000" — een veelvoorkomende placeholder-/testwaarde, geen
+    echt nummer). Dit voorkomt dat willekeurige 10-cijferige reeksen (bijv.
+    een IBAN-rekeningnummer) massaal als telefoonnummer worden gemarkeerd.
+    """
+    if digits.startswith("0031"):
+        digits = "0" + digits[4:]
+    elif digits.startswith("31") and len(digits) == 11:
+        digits = "0" + digits[2:]
+    if len(digits) != 10 or not digits.startswith("06"):
+        return False
+    if len(set(digits[2:])) == 1:
+        return False
+    return True
+
+
+def _build_nl_phone_recognizer():
+    from presidio_analyzer import Pattern, PatternRecognizer
+
+    class NLPhoneRecognizer(PatternRecognizer):
+        def validate_result(self, pattern_text: str) -> Optional[bool]:
+            digits = re.sub(r"\D", "", pattern_text)
+            return _is_valid_nl_phone(digits)
+
+    # Matches the Dutch national mobile format (06-XXXXXXXX, with optional
+    # dash/space separators or none at all) and the international form
+    # (+31 6 XXXXXXXX / 0031 6 XXXXXXXX). The leading \b is only applied to
+    # the "06" branch — a \b right before "+" never matches (neither side is
+    # a word character), so the +31/0031 branches rely on the literal digit
+    # prefix itself to anchor the match instead.
+    pattern = Pattern(
+        name="nl_phone_mobile",
+        regex=r"(?:\+31[-\s]?6|0031[-\s]?6|\b06)(?:[-\s]?\d){8}\b",
+        score=0.4,
+    )
+    return NLPhoneRecognizer(
+        supported_entity="NL_PHONE",
+        patterns=[pattern],
+        supported_language="nl",
+        context=["telefoon", "tel", "bel", "mobiel", "nummer"],
+        name="NL_PHONE_recognizer",
+    )
+
+
 def _init_analyzer():
     """Bouwt de Presidio AnalyzerEngine met NL+EN spaCy-modellen.
 
@@ -211,6 +277,7 @@ def _init_analyzer():
 
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=list(_LANGUAGES))
     analyzer.registry.add_recognizer(_build_nl_bsn_recognizer())
+    analyzer.registry.add_recognizer(_build_nl_phone_recognizer())
     return analyzer
 
 
