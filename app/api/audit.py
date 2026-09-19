@@ -1,4 +1,4 @@
-import hashlib
+import hmac
 import json
 from typing import Optional
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, get_current_user, get_org_scoped_org
-from app.core.audit import generate_hmac_signature
+from app.core.audit import CHAIN_V2_ACTION, CHAIN_V2_ENTITY_TYPE, generate_hmac_signature
 from app.models.user import User
 from app.models.audit_log import AuditLog
 
@@ -59,6 +59,15 @@ def get_audit_logs(
     }
 
 
+def _recompute_record_hash(log: AuditLog) -> str:
+    raw_string = (
+        f"{log.organization_id}{log.entity_type}{log.entity_id}"
+        f"{log.action}{log.details}{log.performed_by}"
+        f"{log.timestamp}{log.previous_hash}"
+    )
+    return generate_hmac_signature(raw_string)
+
+
 @router.get("/verify")
 def verify_audit_chain(
     current_user: User = Depends(get_current_user),
@@ -74,44 +83,76 @@ def verify_audit_chain(
         .all()
     )
 
-    previous_hash = None
-    expected_id = logs[0].id if logs else 1
+    marker_index = None
+    for i, log in enumerate(logs):
+        if log.entity_type == CHAIN_V2_ENTITY_TYPE and log.action == CHAIN_V2_ACTION:
+            marker_index = i
+            break
 
-    for log in logs:
-        if log.id != expected_id:
-            return {
-                "status": "compromised",
-                "log_id": log.id,
-                "message": "Audit ID sequence broken",
-            }
+    legacy_logs = logs if marker_index is None else logs[:marker_index]
+    chain_logs = [] if marker_index is None else logs[marker_index:]
 
-        expected_id += 1
+    legacy_rows_checked = 0
+    legacy_rows_unverifiable = 0
 
-        raw_string = (
-            f"{log.organization_id}{log.entity_type}{log.entity_id}"
-            f"{log.action}{log.details}{log.performed_by}"
-            f"{log.timestamp}{log.previous_hash}"
-        )
-        recalculated_hash = hashlib.sha256(raw_string.encode()).hexdigest()
-
-        if log.record_hash and log.record_hash != recalculated_hash:
+    # Legacy rows (written before the v2 chain existed) can only be
+    # checked individually against their own HMAC — their previous_hash
+    # points into the old global chain, not this organization's chain,
+    # so linkage between them can't be verified here.
+    for log in legacy_logs:
+        if not log.record_hash:
+            legacy_rows_unverifiable += 1
+            continue
+        if not hmac.compare_digest(log.record_hash, _recompute_record_hash(log)):
             return {
                 "status": "compromised",
                 "log_id": log.id,
                 "message": "Hash mismatch detected",
+                "chain_v2_started": marker_index is not None,
+                "legacy_rows_checked": legacy_rows_checked,
+                "legacy_rows_unverifiable": legacy_rows_unverifiable,
+                "chain_rows_checked": 0,
+            }
+        legacy_rows_checked += 1
+
+    chain_rows_checked = 0
+    previous_hash = None
+
+    for idx, log in enumerate(chain_logs):
+        expected_previous = None if idx == 0 else previous_hash
+        if log.previous_hash != expected_previous:
+            return {
+                "status": "compromised",
+                "log_id": log.id,
+                "message": "Broken hash chain detected",
+                "chain_v2_started": True,
+                "legacy_rows_checked": legacy_rows_checked,
+                "legacy_rows_unverifiable": legacy_rows_unverifiable,
+                "chain_rows_checked": chain_rows_checked,
             }
 
-        if log.previous_hash != previous_hash:
-            if log.previous_hash is not None:
-                return {
-                    "status": "compromised",
-                    "log_id": log.id,
-                    "message": "Broken hash chain detected",
-                }
+        if not log.record_hash or not hmac.compare_digest(log.record_hash, _recompute_record_hash(log)):
+            return {
+                "status": "compromised",
+                "log_id": log.id,
+                "message": "Hash mismatch detected",
+                "chain_v2_started": True,
+                "legacy_rows_checked": legacy_rows_checked,
+                "legacy_rows_unverifiable": legacy_rows_unverifiable,
+                "chain_rows_checked": chain_rows_checked,
+            }
 
+        chain_rows_checked += 1
         previous_hash = log.record_hash
 
-    return {"status": "valid", "message": "Audit chain integrity verified"}
+    return {
+        "status": "valid",
+        "message": "Audit chain integrity verified",
+        "chain_v2_started": marker_index is not None,
+        "legacy_rows_checked": legacy_rows_checked,
+        "legacy_rows_unverifiable": legacy_rows_unverifiable,
+        "chain_rows_checked": chain_rows_checked,
+    }
 
 
 @org_audit_router.get("/organizations/{organization_id}/audit-export")
