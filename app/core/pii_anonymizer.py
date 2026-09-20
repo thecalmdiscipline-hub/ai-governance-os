@@ -472,3 +472,35 @@ def anonymize_text(text: str, workflow: Optional[str] = None) -> str:
     )
 
     return anonymized.text
+
+
+# Fixed, obviously fake sentence used only by warm_up(); covers both
+# languages' NER and the pattern recognizers (email, NL phone) so that the
+# lazy allocations of the first real analysis happen at startup instead.
+_WARMUP_TEXT = "Warm-up: contact Jan de Vries via jan@example.com of bel 06-12345678."
+
+
+def warm_up() -> bool:
+    """Loads the Presidio/spaCy engines and runs one dummy analysis.
+
+    Called from the FastAPI lifespan when PII_WARMUP_ON_STARTUP is on, so the
+    ~20 s model load and the first-inference memory growth happen before the
+    app takes traffic instead of inside the first customer request.
+
+    Never raises: on failure it logs an ERROR and returns False. The
+    request path stays fail-closed regardless (anonymize_text still raises
+    PIIAnonymizerUnavailable, workflows still degrade) — a failed warm-up
+    must not crash or crash-loop the service.
+    """
+    try:
+        _get_engines()
+        anonymize_text(_WARMUP_TEXT)
+    except Exception as exc:  # noqa: BLE001 — startup must survive any failure here
+        logger.error(
+            "pii_anonymizer: warm-up failed, starting anyway (requests stay fail-closed): %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+        return False
+    logger.info("pii_anonymizer: warm-up complete")
+    return True

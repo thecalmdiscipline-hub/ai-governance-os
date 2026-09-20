@@ -32,7 +32,8 @@ PYTHON="$VENV/bin/python"
 PIP="$VENV/bin/pip"
 SERVICE="valqeron"
 HEALTH_URL="http://localhost:8000/health"
-HEALTH_RETRIES=6
+# Startup loads the PII models (warm-up) on 1 vCPU: allow up to 90 s.
+HEALTH_RETRIES=18
 HEALTH_INTERVAL=5
 
 # ---------------------------------------------------------------------------

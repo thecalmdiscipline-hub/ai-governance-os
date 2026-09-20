@@ -24,10 +24,18 @@ Group=www-data
 WorkingDirectory=/opt/valqeron
 EnvironmentFile=/opt/valqeron/.env
 
+# One worker on purpose: the droplet has 1 vCPU and ~2 GB RAM, so a second
+# worker only doubles the ~1.5 GB spaCy footprint. With --workers 1 uvicorn
+# runs the server directly (no supervisor), so --timeout-worker-healthcheck
+# is inert; it is kept as a safety net should --workers ever go back to >1
+# (the supervisor's default 5 s healthcheck killed workers during the model
+# load). The PII models are warmed up at startup via PII_WARMUP_ON_STARTUP=1
+# in /opt/valqeron/.env, which makes the start take ~20-40 s.
 ExecStart=/opt/valqeron/venv/bin/uvicorn app.main:app \
     --host 127.0.0.1 \
     --port 8000 \
-    --workers 2 \
+    --workers 1 \
+    --timeout-worker-healthcheck 60 \
     --log-level info \
     --access-log \
     --no-use-colors

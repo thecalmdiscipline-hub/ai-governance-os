@@ -1,9 +1,11 @@
 # pyright: reportArgumentType=false
 # pyright: reportOptionalMemberAccess=false
 
+import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -55,9 +57,27 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
+def _warmup_enabled() -> bool:
+    return os.getenv("PII_WARMUP_ON_STARTUP", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+@asynccontextmanager
+async def lifespan(app_: FastAPI):
+    # Off by default (tests/CI/dev must not load ~1.5 GB of models); switched
+    # on in production via PII_WARMUP_ON_STARTUP=1. Runs before uvicorn binds
+    # the socket, so the model load happens at deploy time, not inside the
+    # first customer request. warm_up() never raises.
+    if _warmup_enabled():
+        from app.core import pii_anonymizer
+
+        await asyncio.to_thread(pii_anonymizer.warm_up)
+    yield
+
+
 app = FastAPI(
     title=os.getenv("APP_NAME", "AI Governance OS"),
     version=os.getenv("APP_VERSION", "0.1.0"),
+    lifespan=lifespan,
 )
 
 # Middleware
