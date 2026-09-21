@@ -1,143 +1,60 @@
-# Deploy Recovery — 165.22.204.23 (api./compliance.valqeron.com)
+# Deploy, terugrollen en herstel — Valqeron
 
-**Status op 2026-08-19:** vanuit deze omgeving is er **geen** toegang tot de droplet — geen `doctl`
-geïnstalleerd, geen DigitalOcean API-token in `.env`, en de lokale SSH-key (`~/.ssh/id_ed25519`,
-fingerprint `SHA256:CKXgE3WqnAxCorYUu3cfcr0f30e6R2SbeAMYYCYhWWk`) kreeg een `Operation timed out`
-op poort 22 — dus zelfs als deze key ooit was toegevoegd, is er nu geen antwoord van de host.
-`curl -I https://compliance.valqeron.com/` en `https://api.valqeron.com/health` timeoutten beide
-na 10s (connectie komt niet tot stand, geen HTTP-response, geen RST). Dit bevestigt de eerdere
-bevinding in `CLAUDE.md` sectie 2/5: de droplet reageert op geen enkel getest protocol.
+Bijgewerkt op 2026-09-21. Alles hieronder is gecontroleerd op de server (`ssh root@164.92.221.90`) of in de repo's; wat ik niet kon controleren staat er expliciet als zodanig bij. Dit document vervangt het oude herstelplan voor de verwijderde droplet `165.22.204.23`.
 
-Er is dus **geen root cause vanuit deze sessie vast te stellen** — het kan een uitgezette/gedecommissioneerde
-droplet zijn, een crashte VM, of een DigitalOcean cloud firewall die alle inbound verkeer blokkeert
-(inclusief SSH). Onderstaande stappen moeten door Dennis zelf via de DigitalOcean-webconsole
-(cloud.digitalocean.com) worden uitgevoerd, omdat er geen programmatische toegang beschikbaar is.
+## 1. Wat draait waar
 
----
+- **Server:** droplet `valqeron-prod-v2`, IP `164.92.221.90`, Ubuntu 24.04, 3,9 GB RAM, 2 vCPU, 4 GB swap. De firewall (`ufw`) laat alleen poort 22, 80 en 443 binnen.
+- **Domeinen** (allemaal op deze server, nginx per domein in `/etc/nginx/sites-enabled/`): `api.valqeron.com` en `compliance.valqeron.com` (de backend-API), `app.valqeron.com` (het klantportaal). De marketingsite `valqeron.com` staat op een andere host en hoort hier niet bij.
+- **Services** (`systemctl status <naam>`): `valqeron` (de API: één uvicorn-proces op `127.0.0.1:8000`, gebruiker `www-data`), `nginx`, `postgresql`, `redis-server`. Certificaten (Let's Encrypt) worden automatisch vernieuwd door `certbot.timer`; ze waren op 2026-09-21 nog 59 dagen geldig.
+- **Mappen:** `/opt/valqeron` (backend-code, `venv/`, het geheime bestand `.env`, en `BUILD_SHA`) en `/opt/valqeron-frontend` (de map `releases/` met één map per portaalversie en de symlink `dist` naar de actieve versie).
+- **Geheimen** staan nooit in git: `.env` staat alleen op de server, de deploy-sleutels staan als GitHub-secret en op Dennis' Mac (`~/.ssh/valqeron_deploy_key` voor de backend, `~/.ssh/valqeron-frontend-deploy` voor het portaal).
 
-## Stap a — Checken of de droplet aan staat
+## 2. Backend deployen (gaat vanzelf)
 
-1. Log in op https://cloud.digitalocean.com
-2. Ga naar **Droplets** in het linkermenu.
-3. Zoek de droplet met IP `165.22.204.23` (waarschijnlijk genaamd iets als `valqeron`, `valqeron-prod` of vergelijkbaar).
-4. Kijk naar de status-indicator:
-   - **Groen "Active"** → de VM zelf draait; het probleem zit in de OS/services óf in de firewall (ga naar stap c/d hieronder).
-   - **Grijs/"Off"** → de droplet is uitgeschakeld. Klik **Power On** (rechtsboven, of via het "⋮"-menu naast de droplet in het overzicht).
-   - **Droplet bestaat niet meer / is niet te vinden** → dan is hij op enig moment verwijderd. Dat is geen "restart"-scenario meer maar een her-provisioning — meld dit terug, want dan is `scripts/setup_server.sh` opnieuw nodig op een nieuwe droplet, en moeten DNS-records (A-records voor `api.`, `app.`, `compliance.valqeron.com`) worden bijgewerkt naar het nieuwe IP.
+1. Een push naar `main` van `ai-governance-os` start **CI** (`.github/workflows/ci.yml`: de tests).
+2. Is CI groen, dan start **Deploy** (`.github/workflows/deploy.yml`). Die logt via SSH in op de server en draait `cd /opt/valqeron && git pull origin main && bash scripts/deploy.sh`.
+3. `scripts/deploy.sh` doet, in deze volgorde: vorige commit onthouden, `git pull`, Python-pakketten installeren, `.env` controleren (`SECRET_KEY`, `DATABASE_URL`, `OPENAI_API_KEY`, `REDIS_URL` moeten gevuld zijn), databasemigraties (`alembic upgrade head`), `seed_modules.py`, het bestand `BUILD_SHA` schrijven, `valqeron` herstarten, de nginx-configs uit `nginx/sites/` synchroniseren (en nginx herladen als er iets veranderd is), en tot 90 seconden wachten tot `http://localhost:8000/health` `status: ok` geeft.
+4. Daarna controleert Deploy nog van buitenaf `https://compliance.valqeron.com/health` en `https://api.valqeron.com/health`.
+5. **Mislukt er iets** (bijvoorbeeld de health-check of `nginx -t`), dan zet het script de code met `git reset --hard` terug naar de vorige commit, schrijft `BUILD_SHA` opnieuw en herstart de service. **Databasemigraties worden niet teruggedraaid**; dat moet je zo nodig met de hand doen (`cd /opt/valqeron && venv/bin/python -m alembic downgrade -1`).
+6. Controle na een deploy: `curl -s https://api.valqeron.com/health` toont `"status":"ok"` en `build_sha` (de korte commit die nu draait).
 
-Kijk ook meteen op het tabblad **Graphs** van de droplet (CPU/Disk/Bandwidth) — een vlakke lijn op 0% over de laatste dagen is een sterke aanwijzing dat de VM al langere tijd stil staat of uit is.
+Met de hand deployen (bijvoorbeeld als GitHub niet werkt): `ssh root@164.92.221.90`, dan `cd /opt/valqeron && git pull origin main && bash scripts/deploy.sh`.
 
----
+## 3. Portaal (frontend) deployen en terugrollen
 
-## Stap b — Inloggen via de DigitalOcean recovery console (niet SSH)
+1. Een push naar `main` van `ai-governance-frontend` start **CI** (lint, tests, build) en daarna **Deploy**. Deploy neemt de build uit CI (er wordt niet opnieuw gebouwd), zet die in `/opt/valqeron-frontend/releases/<commit>/`, verlegt de symlink `dist` naar die map (nginx hoeft niet te herladen), ruimt oude releases op (de laatste 5 blijven, plus de actieve, de vorige en `initial`) en laat een headless browser controleren dat het loginscherm laadt zonder fouten. Faalt die controle, dan draait Deploy zelf terug naar de vorige release.
+2. **Handmatig terugrollen** (vanuit een kopie van de frontend-repo op de Mac): `DEPLOY_TARGET=root@164.92.221.90 DEPLOY_SSH_KEY_FILE=~/.ssh/valqeron-frontend-deploy scripts/rollback.sh --list` toont de releases (de actieve met een `*`); `... scripts/rollback.sh <commit>` zet die release actief. `initial` is de handmatige versie van vóór git. Het script verlegt alleen de symlink en verwijdert niets.
+3. Zonder het script, op de server: `cd /opt/valqeron-frontend && ln -sfn releases/<commit> dist.tmp && mv -T dist.tmp dist`.
 
-SSH werkt niet vanaf hier, dus gebruik de browser-based console die DigitalOcean altijd aanbiedt, ongeacht firewall-instellingen:
+## 4. De systemd-unit synchroniseren (handmatig)
 
-1. Open de droplet-detailpagina (klik op de droplet-naam in het overzicht).
-2. Klik op de tab **Access** in het linkermenu van de droplet-pagina.
-3. Klik op **Launch Droplet Console** (soms genaamd "Launch Recovery Console"). Dit opent een terminal-venster in de browser die rechtstreeks op de VM inlogt via DigitalOcean's eigen infrastructuur — dit werkt zelfs als de firewall alle SSH-verkeer van buitenaf blokkeert.
-4. Log in als `root` met het wachtwoord dat je hebt ingesteld bij het aanmaken van de droplet, of gebruik **Reset Root Password** op dezelfde Access-pagina als je het wachtwoord niet meer weet (DigitalOcean mailt dan een tijdelijk wachtwoord, en je moet de droplet daarna rebooten om het door te laten voeren).
+`deploy.sh` synct de nginx-configs maar **niet** `systemd/valqeron.service`. Heb je die in de repo gewijzigd, doe dan na de deploy: `ssh root@164.92.221.90 'cd /opt/valqeron && cp systemd/valqeron.service /etc/systemd/system/valqeron.service && systemctl daemon-reload && systemctl restart valqeron'` en controleer `/health` (de start duurt ongeveer 15 tot 25 seconden). Nu zijn de unit op de server en in de repo identiek (gecontroleerd met `diff`).
 
----
+## 5. Buitengesloten door tweestapsverificatie (MFA)
 
-## Stap c — Status checken in de recovery console
+Alleen als je geen toegang meer hebt tot je authenticator-app én je back-upcodes kwijt bent:
 
-Zodra je een prompt hebt in de recovery console, draai deze commando's één voor één:
+1. `ssh root@164.92.221.90` en dan `cd /opt/valqeron`.
+2. Eerst kijken wat er zou gebeuren (er wordt niets gewijzigd): `venv/bin/python scripts/mfa_reset.py --username dennis_admin --dry-run`
+3. Echt uitvoeren: `venv/bin/python scripts/mfa_reset.py --username dennis_admin`
+4. Log daarna in met alleen je wachtwoord en schrijf MFA opnieuw in via de Account-pagina van het portaal.
 
-```bash
-# 1. Leeft de machine, en hoe lang staat hij al aan/uit?
-uptime
+Ben je super-admin, dan blijft die rol staan, maar je hebt pas weer toegang tot `/ops` na een nieuwe inschrijving en een nieuwe login met een code. **Is `MFA_ENCRYPTION_KEY` in `/opt/valqeron/.env` kwijt of veranderd**, dan zijn alle opgeslagen MFA-geheimen onleesbaar en krijgen gebruikers met MFA bij het inloggen een 503-melding. Zet de oude sleutel terug uit een back-up van `.env` en herstart met `systemctl restart valqeron`; heb je die niet, maak dan een nieuwe (`venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`), zet hem als `MFA_ENCRYPTION_KEY=` in `.env`, herstart, en draai `mfa_reset.py` voor elke gebruiker die MFA had. Gebruikers zonder MFA kunnen in de tussentijd gewoon inloggen.
 
-# 2. Draait de Valqeron-service?
-systemctl status valqeron --no-pager
+## 6. Waar Sentry staat
 
-# 3. Recente logs van de service (laatste 100 regels)
-journalctl -u valqeron -n 100 --no-pager
+Foutmeldingen gaan naar Sentry (EU-regio, één organisatie met twee projecten): `valqeron-backend` en `valqeron-portal`. De backend-DSN staat alleen in `/opt/valqeron/.env` (`SENTRY_DSN`); de portaal-DSN staat als GitHub-variabele `VITE_SENTRY_DSN` in de frontend-repo en wordt bij de build in het portaal gezet. Er gaan alleen technische gegevens naartoe (type fout, bestands- en functienamen, een gemaskeerd bericht, de build-sha als release), nooit klantinhoud of gebruikersgegevens. Een fout die je in Sentry ziet, kun je in de server-log terugvinden met `journalctl -u valqeron` rond hetzelfde tijdstip.
 
-# 4. Draait nginx?
-systemctl status nginx --no-pager
+## 7. Wat te doen bij een 502 of een niet-bereikbare site
 
-# 5. Is de nginx-config geldig?
-nginx -t
+Een 502 van nginx betekent dat nginx draait maar de API niet antwoordt. **Direct na een deploy of herstart is een 502 normaal**: de API laadt bij het opstarten de anonimiseringsmodellen en is dan ongeveer 15 tot 25 seconden niet bereikbaar. Wacht een minuut en probeer opnieuw. Blijft het 502, ga dan op de server na:
 
-# 6. Luistert er iets op poort 8000 (de FastAPI-app) en 80/443 (nginx)?
-ss -tlnp | grep -E ':8000|:80|:443'
+1. `systemctl status valqeron` (draait de API?) en `journalctl -u valqeron -n 100 --no-pager` (staat er een fout of een `Traceback` in?).
+2. `curl -s http://127.0.0.1:8000/health` op de server zelf. Werkt dat wel maar de site niet, kijk dan naar nginx: `nginx -t`, `systemctl status nginx` en `/var/log/nginx/error.log`.
+3. Geeft `/health` een `503` of `degraded`: controleer de database met `pg_isready` (moet "accepting connections" zeggen) en Redis met `redis-cli ping` (moet `PONG` geven); herstart zo nodig `postgresql` of `redis-server`.
+4. Weinig geheugen? `free -m` (kolom "available") en `dmesg -T | grep -i -E "out of memory|killed process"`. De API gebruikt ongeveer 1,9 GB.
+5. Herstart de API: `systemctl restart valqeron` en wacht tot `curl -s http://127.0.0.1:8000/health` `ok` geeft.
+6. Begon het na een deploy? Kijk in GitHub Actions naar de laatste Deploy-run; het script rolt zelf terug bij een mislukte health-check. Anders: zet een oudere versie terug met `git reset --hard <commit>` in `/opt/valqeron` en herstart (schrijf daarna ook `git rev-parse --short HEAD > BUILD_SHA`), of maak een revert-commit en laat CI/Deploy lopen.
 
-# 7. Is de firewall op OS-niveau (ufw) actief en wat laat hij door?
-ufw status verbose
-
-# 8. Draait Redis (verplicht in productie, zie CLAUDE.md sectie 2)?
-systemctl status redis-server --no-pager
-```
-
-**Wat te verwachten / hoe te interpreteren:**
-- Als `systemctl status valqeron` **"inactive (dead)"** of **"failed"** toont → de service is gestopt of gecrasht. Ga naar Stap d.
-- Als `ss -tlnp` niets toont op poort 8000 → de uvicorn-workers draaien niet, ook al zegt systemd misschien "active" (kan een stuck/zombie state zijn) → herstart alsnog (Stap d).
-- Als nginx niet draait of `nginx -t` een fout geeft → `systemctl restart nginx` na het oplossen van de config-fout uit de foutmelding.
-- Als `ufw status` alles blokkeert behalve wat er expliciet is toegestaan, en poort 80/443 niet in de allow-lijst staat → dat verklaart waarom extern verkeer (inclusief de sandbox-test van gisteren) nergens aankomt, ook al draait de service prima lokaal. Fix: `ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 22/tcp` (pas aan naar wat je daadwerkelijk open wilt hebben) gevolgd door `ufw reload`.
-
----
-
-## Stap d — Service(s) herstarten
-
-```bash
-# Herstart de Valqeron-app
-systemctl restart valqeron
-sleep 2
-systemctl status valqeron --no-pager
-
-# Herstart nginx (alleen als nginx -t hierboven geen fouten gaf)
-systemctl restart nginx
-systemctl status nginx --no-pager
-
-# Lokale check vanaf de droplet zelf — moet een HTTP-response geven, geen timeout
-curl -I http://127.0.0.1:8000/health
-curl -I http://127.0.0.1/
-```
-
-Als `curl -I http://127.0.0.1:8000/health` vanaf de droplet zelf wél een response geeft, maar
-`https://api.valqeron.com/health` van buitenaf nog steeds timeout, dan zit het probleem **niet**
-in de applicatie maar in de **DigitalOcean Cloud Firewall** (netwerkniveau, niet `ufw` op de VM zelf) — zie Stap 4 hieronder.
-
----
-
-## Stap 4 — DigitalOcean Cloud Firewall checken
-
-Dit is een aparte laag bovenop de droplet (niet hetzelfde als `ufw` binnenin de VM) en kan
-inbound verkeer blokkeren nog vóórdat het de VM bereikt — dit zou verklaren waarom zowel de
-SSH-test als de HTTP-tests van gisteren en vandaag zonder enige respons (geen RST, pure timeout)
-bleven hangen, wat typisch is voor "silently dropped by a cloud firewall" in plaats van "poort dicht op de VM".
-
-1. Ga in het linkermenu naar **Networking → Firewalls**.
-2. Kijk of er een firewall gekoppeld is aan de `165.22.204.23`-droplet.
-   - **Geen firewall gekoppeld** → dan is dit niet de oorzaak, ga terug naar Stap c/d.
-   - **Wel gekoppeld** → open 'm en controleer de **Inbound Rules**:
-     - Staat poort 22 (SSH) open voor "All IPv4/IPv6" of een specifieke IP-range? Als je eigen IP (of dat van deze sandbox-omgeving) niet in de allowlist staat, wordt SSH stilletjes gedropt — dat verklaart de `Operation timed out` hierboven.
-     - Staat poort 80 en 443 (HTTP/HTTPS) open voor "All IPv4/IPv6"? Zo niet, voeg een inbound rule toe: **HTTP** (poort 80) en **HTTPS** (poort 443), source = "All IPv4" + "All IPv6".
-3. Sla de firewall-rules op — wijzigingen zijn direct actief, geen reboot nodig.
-
----
-
-## Verificatie (vanaf je eigen laptop of deze sandbox-omgeving, niet vanaf de droplet)
-
-Zodra bovenstaande stappen zijn doorlopen:
-
-```bash
-curl -I https://compliance.valqeron.com/
-curl -I https://api.valqeron.com/health
-```
-
-Beide moeten een HTTP-statuscode teruggeven (200, 301, 404 — maakt niet uit, als het maar geen
-timeout meer is). Meld het resultaat terug zodat `CLAUDE.md` sectie 2 bijgewerkt kan worden naar
-een bevestigde live-status.
-
----
-
-## Als de droplet niet meer bestaat of niet meer te herstellen is
-
-Als blijkt dat de droplet is verwijderd of zo beschadigd is dat een reset nodig is:
-1. Nieuwe droplet aanmaken (Ubuntu, zelfde specs als voorheen).
-2. `scripts/setup_server.sh` gebruiken als basis voor de herinrichting (installeert nginx, certbot, de systemd-service, etc. — zie comments bovenin dat script voor de volgorde).
-3. DNS A-records voor `api.`, `app.`, `compliance.valqeron.com` bijwerken naar het nieuwe IP bij je DNS-provider.
-4. `.env` met productie-secrets (die zijn niet in de repo, zie `.env.example` voor de vereiste keys) opnieuw op de nieuwe droplet zetten.
-5. `scripts/deploy.sh` draaien om de app te deployen.
+**Reageert de server helemaal niet** (ook SSH niet): kijk in het DigitalOcean-paneel of de droplet aan staat en start hem zo nodig; daar is een browserconsole om in te loggen als SSH niet werkt. *(Dit deel is niet vanuit deze omgeving getest; ik heb geen toegang tot het DigitalOcean-paneel.)* In het verleden bleek een droplet definitief verwijderd te zijn na een verlopen betaaltermijn (2026-08-22). Een nieuwe server opzetten gaat met `scripts/setup_server.sh` op een kale Ubuntu 24.04, waarna de A-records van `api.`, `app.` en `compliance.valqeron.com` naar het nieuwe IP moeten wijzen; dat script is voor de huidige droplet gebruikt maar sindsdien niet opnieuw uitgevoerd.
