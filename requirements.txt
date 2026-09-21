@@ -73,3 +73,8 @@ en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_
 
 # Error reporting (Batch D). Exact pin; installs on Python 3.9 (CI/local) and 3.12 (production).
 sentry-sdk[fastapi]==2.69.2
+
+# MFA (Batch E). pyotp: TOTP (RFC 6238). cryptography: Fernet encryption of the TOTP secrets; already
+# installed as a dependency of python-jose[cryptography], pinned to the version in use on 3.9 and 3.12.
+pyotp==2.10.0
+cryptography==44.0.3
