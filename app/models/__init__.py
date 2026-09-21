@@ -15,6 +15,7 @@ from .contact_submission import ContactSubmission
 from app.models.microsoft_document import MicrosoftDocument
 from app.models.microsoft_token import MicrosoftToken
 from app.models.tenant_module import TenantModule
+from app.models.provisioning_request import ProvisioningRequest
 
 # Outbound Engine models
 from app.outbound.models.company import OutboundCompany

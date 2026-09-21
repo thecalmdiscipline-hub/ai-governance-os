@@ -16,11 +16,14 @@ from app.models.user import User
 
 def log_ops_action(
     db: Session,
-    actor: User,
+    actor: Optional[User],
     action: str,
     target_org_id: Optional[int] = None,
     details: str = "",
+    performed_by: Optional[str] = None,
 ) -> None:
+    # `performed_by` overrides the actor's username (used by server-side scripts, e.g. "system:provision_cli").
+    who = performed_by or (actor.username if actor is not None else "system")
     hq_org_id = get_hq_organization_id()
     if hq_org_id is None:
         raise RuntimeError("HQ_ORGANIZATION_ID is not configured; cannot write ops audit lines")
@@ -34,8 +37,8 @@ def log_ops_action(
         entity_type="ops",
         entity_id=target_org_id if target_org_id is not None else 0,
         action=action,
-        details=f"{action} by {actor.username}{target_part}{suffix}",
-        performed_by=actor.username,
+        details=f"{action} by {who}{target_part}{suffix}",
+        performed_by=who,
     )
 
     if target_org_id is not None and target_org_id != hq_org_id:
@@ -45,6 +48,6 @@ def log_ops_action(
             entity_type="ops_access",
             entity_id=hq_org_id,
             action=action,
-            details=f"Valqeron HQ operator {actor.username} performed {action}{suffix}",
-            performed_by=actor.username,
+            details=f"Valqeron HQ operator {who} performed {action}{suffix}",
+            performed_by=who,
         )
