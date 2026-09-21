@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from app.core.config import get_hq_organization_id
 from app.db.session import SessionLocal
 from app.core.security import SECRET_KEY, ALGORITHM
 from app.models.user import User
@@ -87,6 +88,24 @@ def has_super_admin_powers(user: User) -> bool:
     MFA still enabled). Without it a super-admin is an ordinary user of their own tenant, so
     the cross-tenant exceptions below need the MFA login."""
     return bool(user.is_super_admin) and bool(getattr(user, "mfa_verified", False))
+
+
+def require_ops_access(current_user: User = Depends(get_current_user)) -> User:
+    """Control plane guard: active super-admin of the HQ tenant with an MFA-verified token."""
+    hq_org_id = get_hq_organization_id()
+    allowed = (
+        bool(current_user.is_active)
+        and bool(current_user.is_super_admin)
+        and hq_org_id is not None
+        and current_user.organization_id == hq_org_id
+        and bool(current_user.mfa_verified)
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="Operations access requires a super-admin of the HQ organization with two-step verification",
+        )
+    return current_user
 
 
 def require_role(required_role: str) -> Callable:
