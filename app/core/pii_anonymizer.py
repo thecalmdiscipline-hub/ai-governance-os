@@ -491,7 +491,17 @@ def warm_up() -> bool:
     request path stays fail-closed regardless (anonymize_text still raises
     PIIAnonymizerUnavailable, workflows still degrade) — a failed warm-up
     must not crash or crash-loop the service.
+
+    Also imports the openai package (~1.9 s on the droplet), which the workflows
+    otherwise import lazily inside the first request. That import is optional
+    here: if it fails, only a warning is logged and the workflows keep importing
+    it themselves.
     """
+    try:
+        import openai  # noqa: F401 — imported for its side effect: module cache warm
+    except Exception as exc:  # noqa: BLE001 — never block startup on this
+        logger.warning("pii_anonymizer: openai pre-import failed (%s); workflows will import it lazily", type(exc).__name__)
+
     try:
         _get_engines()
         anonymize_text(_WARMUP_TEXT)

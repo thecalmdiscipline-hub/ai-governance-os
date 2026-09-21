@@ -52,3 +52,24 @@ def test_app_still_starts_when_warm_up_fails(monkeypatch):
     monkeypatch.setattr(pii_anonymizer, "_get_engines", MagicMock(side_effect=RuntimeError("x")))
     with TestClient(app) as client:
         assert client.get("/health").status_code in (200, 503)
+
+
+def test_warm_up_pre_imports_openai(monkeypatch):
+    import sys
+
+    monkeypatch.setattr(pii_anonymizer, "_get_engines", MagicMock())
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text", MagicMock())
+    monkeypatch.delitem(sys.modules, "openai", raising=False)
+    assert pii_anonymizer.warm_up() is True
+    assert "openai" in sys.modules  # imported during the warm-up, not in the first request
+
+
+def test_warm_up_survives_a_failing_openai_import(monkeypatch, caplog):
+    import sys
+
+    monkeypatch.setattr(pii_anonymizer, "_get_engines", MagicMock())
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text", MagicMock())
+    monkeypatch.setitem(sys.modules, "openai", None)  # `import openai` now raises ImportError
+    with caplog.at_level("WARNING", logger=pii_anonymizer.logger.name):
+        assert pii_anonymizer.warm_up() is True  # the PII part still counts as a successful warm-up
+    assert "openai pre-import failed" in caplog.text
