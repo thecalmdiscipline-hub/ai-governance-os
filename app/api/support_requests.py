@@ -7,7 +7,7 @@ The organization always comes from the token, never from the body.
 """
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.core.audit import create_audit_log
 from app.models.support_request import SupportRequest
 from app.models.user import User
 from app.services import support_requests as svc
+from app.services.support_mail import notify_support_request
 
 router = APIRouter(prefix="/support-requests", tags=["Support"])
 
@@ -49,6 +50,7 @@ def _public(row: SupportRequest) -> dict:
 @router.post("", status_code=201)
 def create_support_request(
     body: SupportRequestCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -75,6 +77,9 @@ def create_support_request(
         details=f"reference={row.reference}; category={row.category}",
         performed_by=current_user.username,
     )
+
+    # After the commit, outside the request's transaction; never able to fail the request.
+    background_tasks.add_task(notify_support_request, row.id)
 
     return {"reference": row.reference, "status": row.status, "created_at": row.created_at.isoformat()}
 

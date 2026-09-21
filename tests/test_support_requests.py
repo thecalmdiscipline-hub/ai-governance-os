@@ -26,6 +26,13 @@ def _fast_bcrypt(monkeypatch):
     monkeypatch.setattr(security, "pwd_context", CryptContext(schemes=["bcrypt"], bcrypt__rounds=4))
 
 
+@pytest.fixture(autouse=True)
+def _no_mail_config(monkeypatch):
+    # never let a developer's .env make a test talk to Resend
+    for name in ("RESEND_API_KEY", "SUPPORT_FROM_EMAIL", "SUPPORT_NOTIFY_EMAIL"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _org():
     db = SessionLocal()
     org = Organization(name=f"sr-org-{uuid.uuid4().hex[:8]}")
@@ -83,7 +90,7 @@ def test_creates_a_request_for_the_own_organization_and_user():
     assert re.fullmatch(r"SR-\d{6}", data["reference"]) and data["status"] == "new"
     row = _row(data["reference"])
     assert row.organization_id == org and row.user_id == uid
-    assert row.category == "question" and row.status == "new" and row.notify_status == "pending"
+    assert row.category == "question" and row.status == "new" and row.notify_status == "skipped_no_config"
     assert row.reference == f"SR-{row.id:06d}"
 
 
