@@ -16,6 +16,11 @@ from sqlalchemy.orm import Session
 
 load_dotenv()
 
+# Error reporting: no-op unless SENTRY_DSN is set. Must run before the app is created.
+from app.core.observability import init_sentry
+
+init_sentry()
+
 # ---------------------------------------------------------------------------
 # Startup security checks — fail fast before any route is registered
 # ---------------------------------------------------------------------------

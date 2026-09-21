@@ -55,12 +55,20 @@ step() { echo -e "\n${BLUE}━━━ $* ${NC}"; }
 # ---------------------------------------------------------------------------
 PREV_COMMIT=""
 
+# The app reads this once at startup for /health and the Sentry release tag.
+# Not in git (.gitignore); written before every (re)start, including rollbacks.
+write_build_sha() {
+    git -C "$PROJECT_DIR" rev-parse --short HEAD > "$PROJECT_DIR/BUILD_SHA"
+    chmod 644 "$PROJECT_DIR/BUILD_SHA"
+}
+
 rollback() {
     trap - ERR  # prevent recursive trap
     err "Deploy failed — rolling back to ${PREV_COMMIT:-unknown}"
     if [[ -n "$PREV_COMMIT" ]]; then
         git -C "$PROJECT_DIR" reset --hard "$PREV_COMMIT"
         ok "Code reverted to $PREV_COMMIT"
+        write_build_sha
         info "Restarting service with previous code..."
         systemctl restart "$SERVICE" && ok "Service restarted" || err "Service restart failed — check journalctl -u $SERVICE"
     fi
@@ -156,6 +164,8 @@ ok "Seed complete"
 # Step 6 — Restart service
 # ---------------------------------------------------------------------------
 step "Restarting systemd service"
+write_build_sha
+info "Build sha: $(cat "$PROJECT_DIR/BUILD_SHA")"
 systemctl restart "$SERVICE"
 ok "Service restarted"
 

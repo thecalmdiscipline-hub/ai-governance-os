@@ -70,3 +70,6 @@ spacy==3.7.5
 langdetect==1.0.9
 nl_core_news_lg @ https://github.com/explosion/spacy-models/releases/download/nl_core_news_lg-3.7.0/nl_core_news_lg-3.7.0-py3-none-any.whl
 en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.0/en_core_web_lg-3.7.0-py3-none-any.whl
+
+# Error reporting (Batch D). Exact pin; installs on Python 3.9 (CI/local) and 3.12 (production).
+sentry-sdk[fastapi]==2.69.2

@@ -27,4 +27,7 @@ logs/
 # Virtualenv
 venv/
 
+# Written by scripts/deploy.sh on the server
+BUILD_SHA
+
 uploaded_documents/

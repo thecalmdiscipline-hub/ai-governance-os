@@ -4,10 +4,13 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app.core.observability import get_build_sha
+
 router = APIRouter(tags=["Health"])
 
 _START_TIME = time.time()
 _VERSION = os.getenv("APP_VERSION", "0.1.0")
+_BUILD_SHA = get_build_sha()  # read once at startup
 
 
 @router.get("/health", include_in_schema=False)
@@ -44,6 +47,7 @@ def health_check():
         content={
             "status": "ok" if ok else "degraded",
             "version": _VERSION,
+            "build_sha": _BUILD_SHA,
             "uptime_seconds": int(time.time() - _START_TIME),
             "checks": checks,
         },
