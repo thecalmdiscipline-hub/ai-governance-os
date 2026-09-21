@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from app.api.dependencies import get_db, get_current_user, has_super_admin_powers
 from app.core.security import hash_password
 from app.models.user import User
 
@@ -76,7 +76,7 @@ class PasswordReset(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != "admin" and not current_user.is_super_admin:
+    if current_user.role != "admin" and not has_super_admin_powers(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
@@ -84,7 +84,7 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
 def _get_target_user(user_id: int, current_user: User, db: Session) -> User:
     """Fetch a user by id, scoping to caller's org unless super_admin."""
     q = db.query(User).filter(User.id == user_id)
-    if not current_user.is_super_admin:
+    if not has_super_admin_powers(current_user):
         q = q.filter(User.organization_id == current_user.organization_id)
     target = q.first()
     if not target:
@@ -94,7 +94,7 @@ def _get_target_user(user_id: int, current_user: User, db: Session) -> User:
 
 def _guard_super_admin_target(target: User, current_user: User) -> None:
     """Prevent non-super-admins from acting on super_admin accounts."""
-    if target.is_super_admin and not current_user.is_super_admin:
+    if target.is_super_admin and not has_super_admin_powers(current_user):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
@@ -108,7 +108,7 @@ def create_user(
     current_user: User = Depends(_require_admin),
     db: Session = Depends(get_db),
 ):
-    if payload.organization_id is not None and not current_user.is_super_admin:
+    if payload.organization_id is not None and not has_super_admin_powers(current_user):
         raise HTTPException(
             status_code=403,
             detail="Only super admins can create users in other organizations",
@@ -116,7 +116,7 @@ def create_user(
 
     org_id = (
         payload.organization_id
-        if current_user.is_super_admin and payload.organization_id is not None
+        if has_super_admin_powers(current_user) and payload.organization_id is not None
         else current_user.organization_id
     )
 
@@ -143,7 +143,7 @@ def list_users(
     current_user: User = Depends(_require_admin),
     db: Session = Depends(get_db),
 ):
-    if organization_id is not None and not current_user.is_super_admin:
+    if organization_id is not None and not has_super_admin_powers(current_user):
         raise HTTPException(
             status_code=403,
             detail="Only super admins can list users in other organizations",
@@ -151,7 +151,7 @@ def list_users(
 
     org_id = (
         organization_id
-        if current_user.is_super_admin and organization_id is not None
+        if has_super_admin_powers(current_user) and organization_id is not None
         else current_user.organization_id
     )
 

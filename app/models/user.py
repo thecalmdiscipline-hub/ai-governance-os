@@ -16,6 +16,9 @@ class User(Base):
 
     organization = relationship("Organization")
 
+    # Not a column: set per request by get_current_user from the token's mfa claim.
+    mfa_verified: bool = False
+
     failed_login_attempts = Column(Integer, default=0)
     account_locked_until = Column(DateTime, nullable=True)
 

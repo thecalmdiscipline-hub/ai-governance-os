@@ -86,6 +86,7 @@ app = FastAPI(
 )
 
 # Middleware
+from app.api.dependencies import PasswordChangeRequired
 from app.core.middleware import setup_middleware
 setup_middleware(app)
 
@@ -99,6 +100,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": "internal_server_error", "message": "An unexpected error occurred."},
     )
+
+@app.exception_handler(PasswordChangeRequired)
+async def password_change_required_handler(request: Request, exc: PasswordChangeRequired):
+    return JSONResponse(status_code=403, content={"error": "password_change_required"})
 
 # DB init — all models imported so SQLAlchemy registers them in metadata
 from app.db.session import engine
@@ -125,6 +130,7 @@ from app.api.audit import org_audit_router, router as audit_router
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.governance import router as governance_router
+from app.api.mfa import router as mfa_router
 from app.api.health import router as health_router
 from app.api.microsoft import router as microsoft_router
 from app.api.users import router as users_router
@@ -132,6 +138,7 @@ from app.workflows.routers import router as workflows_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(mfa_router)
 app.include_router(users_router)
 app.include_router(governance_router)
 app.include_router(audit_router)

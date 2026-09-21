@@ -10,6 +10,8 @@ from app.core.rate_limiter import rate_limit_login
 from app.core.security import verify_password, create_access_token
 from app.models.user import User
 
+MFA_TOKEN_MINUTES = 5
+
 router = APIRouter(tags=["Auth"])
 
 security_logger = logging.getLogger("security")
@@ -47,6 +49,15 @@ def login(
     user.account_locked_until = None
     db.commit()
 
+    # Second factor: a correct password alone does not yield an access token when MFA is on.
+    # The short-lived mfa_token is only valid for POST /login/mfa (see _authenticate: "purpose").
+    if user.mfa_enabled:
+        mfa_token = create_access_token(
+            data={"sub": user.username, "org_id": user.organization_id, "purpose": "mfa"},
+            expires_delta=timedelta(minutes=MFA_TOKEN_MINUTES),
+        )
+        return {"mfa_required": True, "mfa_token": mfa_token}
+
     access_token = create_access_token(
         data={
             "sub": user.username,
@@ -57,7 +68,10 @@ def login(
 
     security_logger.info(f"Successful login for user: {user.username}")
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    response = {"access_token": access_token, "token_type": "bearer"}
+    if user.must_change_password:
+        response["must_change_password"] = True
+    return response
 
 
 @router.get("/modules")

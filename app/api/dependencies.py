@@ -21,10 +21,12 @@ def get_db():
         db.close()
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
+class PasswordChangeRequired(Exception):
+    """Raised for users with must_change_password=True; app/main.py turns it into
+    403 {"error": "password_change_required"}."""
+
+
+def _authenticate(token: str, db: Session, allow_password_change: bool) -> User:
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials"
@@ -39,6 +41,11 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
+    # Short-lived tokens for a special step (the MFA step of the login) carry a "purpose"
+    # claim and are never valid as access tokens.
+    if payload.get("purpose") is not None:
+        raise credentials_exception
+
     q = db.query(User).filter(User.username == username)
 
     if org_id is not None:
@@ -49,12 +56,42 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # The "mfa" claim only counts while MFA is still enabled for the user, so resetting or
+    # disabling MFA also invalidates the elevated rights of tokens that were issued before.
+    user.mfa_verified = bool(payload.get("mfa")) and bool(user.mfa_enabled)
+
+    if user.must_change_password and not allow_password_change:
+        raise PasswordChangeRequired()
+
     return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    return _authenticate(token, db, allow_password_change=False)
+
+
+def get_current_user_allow_password_change(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """Same as get_current_user, but for the few endpoints a user with must_change_password
+    may still call: change-password, me and the MFA endpoints."""
+    return _authenticate(token, db, allow_password_change=True)
+
+
+def has_super_admin_powers(user: User) -> bool:
+    """is_super_admin only counts together with an MFA-verified token (claim mfa=true and
+    MFA still enabled). Without it a super-admin is an ordinary user of their own tenant, so
+    the cross-tenant exceptions below need the MFA login."""
+    return bool(user.is_super_admin) and bool(getattr(user, "mfa_verified", False))
 
 
 def require_role(required_role: str) -> Callable:
     def role_checker(current_user: User = Depends(get_current_user)):
-        if not current_user.is_super_admin and current_user.role != required_role:
+        if not has_super_admin_powers(current_user) and current_user.role != required_role:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user
 
@@ -63,7 +100,7 @@ def require_role(required_role: str) -> Callable:
 
 def get_org_scoped_org(organization_id: int, current_user: User, db: Session):
     q = db.query(Organization).filter(Organization.id == organization_id)
-    if not current_user.is_super_admin:
+    if not has_super_admin_powers(current_user):
         q = q.filter(Organization.id == current_user.organization_id)
     org = q.first()
     if not org:

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import (
     get_db,
     get_current_user,
+    has_super_admin_powers,
     require_role,
     get_org_scoped_org,
     get_org_scoped_system,
@@ -57,7 +58,7 @@ def create_organization(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not current_user.is_super_admin:
+    if not has_super_admin_powers(current_user):
         raise HTTPException(status_code=403, detail="Only super admins can create organizations")
 
     db_org = Organization(**org.dict())
@@ -561,7 +562,7 @@ def delete_ai_risk(
 ):
     risk = get_org_scoped_risk(risk_id, current_user, db)
 
-    if risk.risk_level == "high" and not current_user.is_super_admin:
+    if risk.risk_level == "high" and not has_super_admin_powers(current_user):
         raise HTTPException(
             status_code=403,
             detail="High-risk records are immutable. Super-admin required.",
