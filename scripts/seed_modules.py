@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.db.session import SessionLocal
-from app.models.tenant_module import TenantModule
+from app.models.organization import Organization
+from app.services.tenant_modules import ensure_modules
 
 SEED_DATA: dict = {
     1: {
@@ -33,32 +34,26 @@ SEED_DATA: dict = {
 
 
 def seed() -> None:
+    """Insert-only bootstrap of the original demo/HQ module sets (unchanged behaviour).
+
+    Runs on every deploy (scripts/deploy.sh), so it must never alter an existing organization: it only inserts
+    rows that are missing and skips organizations that have a tier (those are managed through the module API,
+    and re-adding a module removed there would undo that change). Organizations 1 and 2 have no tier
+    (grandfathered), so for them this behaves exactly as before.
+    """
     db = SessionLocal()
     inserted = 0
     skipped = 0
 
     try:
         for org_id, module_keys in SEED_DATA.items():
-            for key in sorted(module_keys):
-                exists = (
-                    db.query(TenantModule)
-                    .filter(
-                        TenantModule.organization_id == org_id,
-                        TenantModule.module_key == key,
-                    )
-                    .first()
-                )
-                if exists:
-                    skipped += 1
-                else:
-                    db.add(
-                        TenantModule(
-                            organization_id=org_id,
-                            module_key=key,
-                            is_active=True,
-                        )
-                    )
-                    inserted += 1
+            org = db.query(Organization).filter(Organization.id == org_id).first()
+            if org is not None and org.tier is not None:
+                skipped += len(module_keys)
+                continue
+            ins, skp = ensure_modules(db, org_id, module_keys)
+            inserted += ins
+            skipped += skp
 
         db.commit()
         print(f"Seed complete — inserted: {inserted}, skipped (already present): {skipped}")

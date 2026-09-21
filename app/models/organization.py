@@ -15,6 +15,9 @@ class Organization(Base):
     country = Column(String, nullable=True)
     sector = Column(String, nullable=True)
 
+    # starter | business | enterprise; NULL for organizations that existed before tiers (grandfathered).
+    tier = Column(String, nullable=True)
+
     ai_systems = relationship("AISystem", back_populates="organization")
     audit_logs = relationship("AuditLog", back_populates="organization")
     ai_policies = relationship("AIPolicy", back_populates="organization")
