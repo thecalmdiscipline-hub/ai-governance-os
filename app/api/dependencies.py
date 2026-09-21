@@ -57,6 +57,11 @@ def _authenticate(token: str, db: Session, allow_password_change: bool) -> User:
     if user is None:
         raise credentials_exception
 
+    # A deactivated user must lose access at once, also with a token that was issued before
+    # the deactivation (tokens live up to 60 minutes). Same generic 401 as any invalid token.
+    if not user.is_active:
+        raise credentials_exception
+
     # The "mfa" claim only counts while MFA is still enabled for the user, so resetting or
     # disabling MFA also invalidates the elevated rights of tokens that were issued before.
     user.mfa_verified = bool(payload.get("mfa")) and bool(user.mfa_enabled)
