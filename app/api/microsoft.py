@@ -2,7 +2,7 @@ from uuid import uuid4
 from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, get_current_user
@@ -85,6 +85,7 @@ def microsoft_callback(
 def microsoft_list_files(
     payload: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     payload = payload or {}
     access_token = payload.get("access_token")
@@ -95,7 +96,9 @@ def microsoft_list_files(
         ).order_by(MicrosoftToken.id.desc()).first()
 
         if not token_row:
-            raise HTTPException(status_code=400, detail="No Microsoft connection found")
+            # Was a NameError (`db` was not a parameter) and so a 500. Nothing stores a MicrosoftToken yet
+            # (see CLAUDE.md, section 5), so without a token in the body this is always "not connected".
+            return JSONResponse(status_code=409, content={"error": "microsoft_not_connected"})
 
         access_token = token_row.access_token
 
