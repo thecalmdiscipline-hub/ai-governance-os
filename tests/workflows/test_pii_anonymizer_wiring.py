@@ -5,9 +5,11 @@ sending raw, unanonymized text) when the anonymizer itself is unavailable.
 This is the test that directly backs the "Geen AVG-anonimisering vóór
 LLM-calls" risico fix in CLAUDE.md §5: it does not test Presidio's
 detection quality (see tests/test_pii_anonymizer.py for that) — it tests
-the WIRING, i.e. that app.core.pii_anonymizer.anonymize_text() is on the
-path between `_build_user_message(...)` and every `client.chat.completions
-.create(...)` call, for all 10 workflows, with no exceptions.
+the WIRING, i.e. that app.core.pii_anonymizer.anonymize_text() (or, for
+quote_contract_generator since 2026-10-05, anonymize_text_with_mapping() —
+see that test for why) is on the path between `_build_user_message(...)`
+and every `client.chat.completions.create(...)` call, for all 10
+workflows, with no exceptions.
 
 Uses the same `import openai; openai.OpenAI(...)` — style patching as the
 existing `mock_openai_response()` helper in conftest.py, plus
@@ -120,14 +122,26 @@ def test_workflow_calls_anonymize_text_with_its_own_workflow_key(monkeypatch, mo
         calls.append(workflow)
         return text
 
+    # quote_contract_generator hands the LLM's own free-text response back
+    # to the client (every other workflow here doesn't), so — since
+    # 2026-10-05 — it calls anonymize_text_with_mapping() instead of
+    # anonymize_text(), so it can restore any placeholder the LLM echoes
+    # back (see CLAUDE.md §6 and app/core/pii_anonymizer.py). Spy on
+    # whichever one this workflow is actually wired to.
+    def _spy_with_mapping(text, workflow=None):
+        calls.append(workflow)
+        return text, {}
+
     monkeypatch.setattr(pii_anonymizer, "anonymize_text", _spy)
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text_with_mapping", _spy_with_mapping)
 
     run = importlib.import_module(module_path).run
     result = run(payload, **kwargs)
 
     assert calls == [workflow_key], (
-        f"{workflow_key}: expected exactly one anonymize_text() call with "
-        f"workflow={workflow_key!r}, got {calls!r}"
+        f"{workflow_key}: expected exactly one anonymize_text()/"
+        f"anonymize_text_with_mapping() call with workflow={workflow_key!r}, "
+        f"got {calls!r}"
     )
     assert result["status"] == "ok"
 
