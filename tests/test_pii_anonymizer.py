@@ -28,22 +28,26 @@ import pytest
 from app.core import pii_anonymizer
 
 # Captured at collection time, before any fixture has a chance to monkeypatch
-# pii_anonymizer.anonymize_text — this is the real implementation.
+# pii_anonymizer.anonymize_text / anonymize_text_with_mapping — these are
+# the real implementations.
 _REAL_ANONYMIZE_TEXT = pii_anonymizer.anonymize_text
+_REAL_ANONYMIZE_TEXT_WITH_MAPPING = pii_anonymizer.anonymize_text_with_mapping
 
 
 @pytest.fixture(autouse=True)
 def _use_real_anonymize_text(monkeypatch, _mock_pii_anonymizer_by_default):
     """Undo conftest.py's autouse identity-mock for every test in this file.
 
-    conftest.py patches `pii_anonymizer.anonymize_text` to a no-op
-    passthrough by default, so the ~200 workflow tests don't need Presidio
-    installed. This file's whole purpose is to exercise the REAL
-    anonymize_text, so it must restore it — depending on
-    `_mock_pii_anonymizer_by_default` by name guarantees this fixture runs
-    *after* that one, so ours is the one that wins.
+    conftest.py patches `pii_anonymizer.anonymize_text` (and, since
+    2026-10-05, `anonymize_text_with_mapping`) to no-op passthroughs by
+    default, so the ~200 workflow tests don't need Presidio installed. This
+    file's whole purpose is to exercise the REAL implementations, so it
+    must restore both — depending on `_mock_pii_anonymizer_by_default` by
+    name guarantees this fixture runs *after* that one, so ours is the one
+    that wins.
     """
     monkeypatch.setattr(pii_anonymizer, "anonymize_text", _REAL_ANONYMIZE_TEXT)
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text_with_mapping", _REAL_ANONYMIZE_TEXT_WITH_MAPPING)
     yield
 
 
@@ -376,3 +380,145 @@ def test_anonymize_text_pure_dutch_text_still_detects_real_dutch_person():
     result = pii_anonymizer.anonymize_text(text, workflow="business_intelligence")
     assert "Pieter de Vries" not in result
     assert "<PERSOON>" in result
+
+
+# ---------------------------------------------------------------------------
+# anonymize_text_with_mapping() / restore_placeholders() — added 2026-10-05
+# after a real demo run showed a literal "<LOCATIE>" placeholder leak into
+# Quote & Contract Generator's generated quote text (see CLAUDE.md §6).
+#
+# restore_placeholders() itself is pure regex/dict logic with no Presidio
+# dependency, so those tests run unconditionally (no @requires_presidio).
+# anonymize_text_with_mapping() needs the real detection pipeline, so those
+# are gated the same way as the rest of tier 2 above. Distinct-value/
+# numbering tests deliberately use EMAIL_ADDRESS (a deterministic
+# regex-based recognizer) rather than PERSON/LOCATION (NER-based, less
+# predictable span boundaries) to keep assertions exact rather than fuzzy.
+# ---------------------------------------------------------------------------
+
+@requires_presidio
+def test_anonymize_text_with_mapping_returns_restorable_mapping():
+    text = "Please send the invoice to jan@acme.nl as soon as possible."
+    anonymized, mapping = pii_anonymizer.anonymize_text_with_mapping(text, workflow="quote_contract_generator")
+
+    assert "jan@acme.nl" not in anonymized
+    assert "<E-MAILADRES>" in anonymized
+    assert mapping == {"<E-MAILADRES>": "jan@acme.nl"}
+
+
+@requires_presidio
+def test_anonymize_text_with_mapping_numbers_distinct_values_of_same_type():
+    text = "Contact jan@acme.nl or piet@acme.nl for details."
+    anonymized, mapping = pii_anonymizer.anonymize_text_with_mapping(text, workflow="quote_contract_generator")
+
+    assert "jan@acme.nl" not in anonymized
+    assert "piet@acme.nl" not in anonymized
+    assert "<E-MAILADRES>" in anonymized
+    assert "<E-MAILADRES_2>" in anonymized
+    assert mapping == {"<E-MAILADRES>": "jan@acme.nl", "<E-MAILADRES_2>": "piet@acme.nl"}
+
+
+@requires_presidio
+def test_anonymize_text_with_mapping_shares_placeholder_for_repeated_identical_value():
+    text = "Email jan@acme.nl for sales, or jan@acme.nl for support."
+    anonymized, mapping = pii_anonymizer.anonymize_text_with_mapping(text, workflow="quote_contract_generator")
+
+    assert "jan@acme.nl" not in anonymized
+    # Both occurrences share the same (unnumbered) placeholder, so there is
+    # exactly one mapping entry, not two.
+    assert mapping == {"<E-MAILADRES>": "jan@acme.nl"}
+    assert anonymized.count("<E-MAILADRES>") == 2
+
+
+@requires_presidio
+def test_anonymize_text_with_mapping_empty_text_returns_empty_mapping():
+    assert pii_anonymizer.anonymize_text_with_mapping("", workflow="quote_contract_generator") == ("", {})
+
+
+@requires_presidio
+def test_anonymize_text_with_mapping_no_pii_returns_empty_mapping():
+    text = "This is a generic sentence about software architecture."
+    anonymized, mapping = pii_anonymizer.anonymize_text_with_mapping(text, workflow="quote_contract_generator")
+    assert anonymized == text
+    assert mapping == {}
+
+
+@requires_presidio
+def test_anonymize_text_with_mapping_then_restore_round_trips():
+    original = "Contact jan@acme.nl or piet@acme.nl for details."
+    anonymized, mapping = pii_anonymizer.anonymize_text_with_mapping(original, workflow="quote_contract_generator")
+
+    # Simulate an LLM that echoes the placeholders back verbatim somewhere
+    # in its own generated text — restoring must reconstruct the originals.
+    restored = pii_anonymizer.restore_placeholders(anonymized, mapping)
+    assert restored == original
+
+
+def test_restore_placeholders_restores_known_mapping():
+    text = "Thank you for your enquiry about our office in <LOCATIE>."
+    restored = pii_anonymizer.restore_placeholders(text, {"<LOCATIE>": "Sheffield, UK"})
+    assert restored == "Thank you for your enquiry about our office in Sheffield, UK."
+
+
+def test_restore_placeholders_restores_numbered_placeholders_independently():
+    text = "We will visit <LOCATIE> first, then <LOCATIE_2>."
+    mapping = {"<LOCATIE>": "Sheffield", "<LOCATIE_2>": "Manchester"}
+    assert pii_anonymizer.restore_placeholders(text, mapping) == "We will visit Sheffield first, then Manchester."
+
+
+def test_restore_placeholders_does_not_show_unresolved_placeholder_raw():
+    # "<LOCATIE>" is deliberately NOT in the mapping — simulates the LLM
+    # inventing or mangling a placeholder the anonymizer never produced.
+    text = "Our office is in <LOCATIE>."
+    restored = pii_anonymizer.restore_placeholders(text, {})
+
+    assert "<LOCATIE>" not in restored
+    assert pii_anonymizer._UNRESOLVED_PLACEHOLDER_FILLER in restored
+
+
+def test_restore_placeholders_resolves_known_and_scrubs_unknown_in_same_text():
+    # A mix: one placeholder IS in the mapping and must be restored: one
+    # is NOT and must be scrubbed, not shown raw — in the same string.
+    text = "Address: <LOCATIE>. Reference: <ONBEKEND>."
+    restored = pii_anonymizer.restore_placeholders(text, {"<LOCATIE>": "Sheffield, UK"})
+
+    assert "Sheffield, UK" in restored
+    assert "<LOCATIE>" not in restored
+    assert "<ONBEKEND>" not in restored
+    assert pii_anonymizer._UNRESOLVED_PLACEHOLDER_FILLER in restored
+
+
+def test_restore_placeholders_empty_text_returns_empty():
+    assert pii_anonymizer.restore_placeholders("", {"<LOCATIE>": "Sheffield"}) == ""
+
+
+def test_restore_placeholders_text_without_any_placeholder_is_unchanged():
+    text = "This text has no placeholders at all."
+    assert pii_anonymizer.restore_placeholders(text, {}) == text
+
+
+def test_restore_placeholders_logs_only_the_tag_never_the_surrounding_text_or_value(caplog):
+    # The log line for an unresolved placeholder must identify WHAT
+    # happened (count + tag name) without ever including the original
+    # surrounding sentence or any real value — those are exactly the
+    # things that must never reach a log file.
+    text = "Confidential detail: <ONBEKEND> should never appear in a log line."
+    with caplog.at_level("WARNING", logger="app.core.pii_anonymizer"):
+        pii_anonymizer.restore_placeholders(text, {})
+
+    assert len(caplog.records) == 1
+    logged_message = caplog.records[0].getMessage()
+    assert "<ONBEKEND>" in logged_message  # the tag itself is fine to log
+    assert "Confidential detail" not in logged_message
+    assert "should never appear in a log line" not in logged_message
+
+
+def test_restore_placeholders_does_not_log_when_everything_resolves(caplog):
+    # The success path (every placeholder restored) must stay silent —
+    # restoring a real value is not itself a noteworthy/loggable event,
+    # and logging it would risk the original value ending up in a log.
+    text = "Our office is in <LOCATIE>."
+    with caplog.at_level("DEBUG", logger="app.core.pii_anonymizer"):
+        pii_anonymizer.restore_placeholders(text, {"<LOCATIE>": "Sheffield, UK"})
+
+    assert caplog.records == []

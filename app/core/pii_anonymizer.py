@@ -83,6 +83,36 @@ Ontwerpkeuzes:
     payload teruggeven aan de gebruiker (nooit via de LLM-response) — zie de
     per-workflow docstrings voor de bevestiging per workflow.
 
+Herstelbare anonimisering (toegevoegd 2026-10-05, zie CLAUDE.md §6):
+  Sommige workflows geven de LLM-respons zelf (geschreven, narratieve tekst)
+  terug aan de gebruiker — en die tekst kan de anonimiseringsplaceholder
+  letterlijk bevatten als de LLM 'm overneemt (gevonden bij Quote & Contract
+  Generator: een klantadres werd geanonimiseerd vóór de OpenAI-call, maar de
+  ruwe "<LOCATIE>"-placeholder kwam ongewijzigd terug in de gegenereerde
+  offertetekst). Voor die gevallen bestaat `anonymize_text_with_mapping()`:
+  zelfde detectie als `anonymize_text()`, maar retourneert ook een mapping
+  (placeholder -> originele waarde) zodat de aanroeper die achteraf kan
+  terugzetten met `restore_placeholders()`. Elke DISTINCTE waarde van een
+  entiteitstype krijgt zijn eigen placeholder (<TYPE>, <TYPE_2>, <TYPE_3>,
+  ...) zodat terugzetten ze uit elkaar kan houden; gelijke waarden delen één
+  placeholder. `anonymize_text()` zelf blijft ongewijzigd (geen nummering,
+  geen mapping) — alleen workflows die expliciet voor
+  `anonymize_text_with_mapping()` kiezen krijgen dit gedrag.
+
+  Terugzetten is veilig omdat het alleen data teruggeeft aan dezelfde
+  aanvraag/gebruiker die 'm zelf heeft aangeleverd — er wordt niets nieuws
+  blootgegeven aan een andere partij. De mapping en de herstelde tekst mogen
+  wel nooit worden gelogd, opgeslagen of naar Sentry gestuurd (bevat de
+  originele persoonsgegevens) — alleen aantallen/entiteitstypen, nooit
+  inhoud, net als bij `anonymize_text()` zelf.
+
+  `restore_placeholders()` is ook het vangnet: een placeholder-vormig token
+  (patroon "<LETTERS[_N]>") dat NIET in de mapping staat — bijvoorbeeld
+  omdat de LLM het parafraseerde, afkapte, of zelf verzon — wordt nooit ruw
+  getoond aan de klant. Het wordt vervangen door een neutrale, inhoudsloze
+  tekst ("[omitted]"), en het aantal/de placeholder-naam (nooit de omringende
+  tekst) wordt gelogd zodat het gat zichtbaar blijft voor een operator.
+
 Zie tests/test_pii_anonymizer.py voor de verwachte input/output-contracten.
 """
 from __future__ import annotations
@@ -383,29 +413,18 @@ def _resolve_overlaps(results: List[Any]) -> List[Any]:
     return sorted(selected, key=lambda r: r.start)
 
 
-def anonymize_text(text: str, workflow: Optional[str] = None) -> str:
-    """Anonimiseert persoonsgegevens in `text` vóór verzending naar OpenAI.
+def _analyze_resolved(text: str, workflow: Optional[str]) -> List[Any]:
+    """Draait de volledige NL+EN entiteitsanalyse voor `text` en retourneert
+    de overlap-opgeloste resultatenlijst.
 
-    Args:
-        text: de ruwe tekst die anders 1-op-1 als LLM-input zou dienen.
-        workflow: workflow-key (bijv. "sales_lead_qualification"), gebruikt
-            om de juiste entiteitenset te kiezen (zie ENTITY_SETS hierboven).
-            Onbekende/None -> standaard volledige set.
-
-    Returns:
-        De tekst met gedetecteerde persoonsgegevens vervangen door
-        "<TYPE>"-placeholders. Lege/blanco input wordt ongewijzigd
-        teruggegeven (niets te anonimiseren, geen reden om te falen).
-
-    Raises:
-        PIIAnonymizerUnavailable: als de anonimisering zelf niet kon
-            draaien. Dit MOET door de aanroeper worden opgevangen door het
-            bestaande "degraded"-antwoordpad van de workflow te nemen.
+    Gedeeld door `anonymize_text()` en `anonymize_text_with_mapping()` zodat
+    beide exact dezelfde detectielogica toepassen (taal-onafhankelijke
+    entiteiten met beide modellen, NER-afhankelijke entiteiten beperkt tot
+    de gedetecteerde dominante taal — zie de module-docstring). Bevat geen
+    enkele aanname over wat de aanroeper met de resultaten doet (vervangen
+    door een vaste placeholder, of een herstelbare mapping opbouwen).
     """
-    if not text or not text.strip():
-        return text
-
-    analyzer, anonymizer_engine = _get_engines()
+    analyzer, _ = _get_engines()
     entities = ENTITY_SETS.get(workflow or "", _DEFAULT_ENTITIES)
 
     # Splits in taal-onafhankelijke (regex/checksum) en NER-afhankelijke
@@ -440,11 +459,40 @@ def anonymize_text(text: str, workflow: Optional[str] = None) -> str:
                 f"PII-analyse ({language}) mislukt: {type(exc).__name__}: {exc}"
             ) from exc
 
-    if not all_results:
+    return _resolve_overlaps(all_results)
+
+
+def anonymize_text(text: str, workflow: Optional[str] = None) -> str:
+    """Anonimiseert persoonsgegevens in `text` vóór verzending naar OpenAI.
+
+    Args:
+        text: de ruwe tekst die anders 1-op-1 als LLM-input zou dienen.
+        workflow: workflow-key (bijv. "sales_lead_qualification"), gebruikt
+            om de juiste entiteitenset te kiezen (zie ENTITY_SETS hierboven).
+            Onbekende/None -> standaard volledige set.
+
+    Returns:
+        De tekst met gedetecteerde persoonsgegevens vervangen door
+        "<TYPE>"-placeholders. Lege/blanco input wordt ongewijzigd
+        teruggegeven (niets te anonimiseren, geen reden om te falen).
+
+    Raises:
+        PIIAnonymizerUnavailable: als de anonimisering zelf niet kon
+            draaien. Dit MOET door de aanroeper worden opgevangen door het
+            bestaande "degraded"-antwoordpad van de workflow te nemen.
+
+    Zie `anonymize_text_with_mapping()` hieronder voor workflows die de
+    geanonimiseerde placeholder later weer moeten kunnen terugzetten in een
+    LLM-respons die aan de gebruiker wordt getoond.
+    """
+    if not text or not text.strip():
         return text
 
-    resolved = _resolve_overlaps(all_results)
+    resolved = _analyze_resolved(text, workflow)
+    if not resolved:
+        return text
 
+    _, anonymizer_engine = _get_engines()
     from presidio_anonymizer.entities import OperatorConfig
 
     operators = {
@@ -472,6 +520,131 @@ def anonymize_text(text: str, workflow: Optional[str] = None) -> str:
     )
 
     return anonymized.text
+
+
+def anonymize_text_with_mapping(
+    text: str, workflow: Optional[str] = None
+) -> "tuple[str, Dict[str, str]]":
+    """Zelfde detectie als `anonymize_text()`, maar retourneert ook een
+    mapping (placeholder -> originele waarde) zodat de aanroeper de
+    placeholder later kan terugzetten met `restore_placeholders()`.
+
+    Gebruik dit (in plaats van `anonymize_text()`) alleen voor workflows
+    die de LLM-respons zelf — geschreven, narratieve tekst — teruggeven aan
+    de gebruiker, en waar die tekst dus letterlijk een placeholder zou
+    kunnen bevatten als de LLM 'm overneemt.
+
+    In tegenstelling tot `anonymize_text()` krijgt elke DISTINCTE waarde
+    van een entiteitstype hier zijn eigen placeholder (<TYPE> voor de
+    eerste, <TYPE_2>, <TYPE_3>, ... voor volgende distincte waarden) zodat
+    terugzetten ze uit elkaar kan houden; twee identieke waarden delen één
+    placeholder. Dit raakt alleen de output van déze functie —
+    `anonymize_text()` zelf blijft ongewijzigd.
+
+    Returns:
+        (anonimized_text, mapping). `mapping` is leeg als er niets te
+        anonimiseren viel. De mapping bevat de ORIGINELE persoonsgegevens
+        als waarden — nooit loggen, opslaan, of ergens anders naartoe
+        sturen dan terug naar dezelfde aanvraag die de data aanleverde.
+
+    Raises:
+        PIIAnonymizerUnavailable: zelfde fail-closed contract als
+            `anonymize_text()`.
+    """
+    if not text or not text.strip():
+        return text, {}
+
+    resolved = _analyze_resolved(text, workflow)
+    if not resolved:
+        return text, {}
+
+    value_to_placeholder: Dict[str, str] = {}
+    type_counts: Dict[str, int] = {}
+    mapping: Dict[str, str] = {}
+    pieces: List[str] = []
+    last_end = 0
+
+    for r in resolved:
+        original_value = text[r.start:r.end]
+        cache_key = f"{r.entity_type}::{original_value}"
+        placeholder = value_to_placeholder.get(cache_key)
+        if placeholder is None:
+            base = _REPLACEMENTS.get(r.entity_type, "<PERSOONSGEGEVEN>")
+            type_counts[r.entity_type] = type_counts.get(r.entity_type, 0) + 1
+            n = type_counts[r.entity_type]
+            # base looks like "<LOCATIE>" — insert the counter before the
+            # closing '>' for every distinct value after the first.
+            placeholder = base if n == 1 else f"{base[:-1]}_{n}>"
+            value_to_placeholder[cache_key] = placeholder
+            mapping[placeholder] = original_value
+        pieces.append(text[last_end:r.start])
+        pieces.append(placeholder)
+        last_end = r.end
+    pieces.append(text[last_end:])
+
+    logger.info(
+        "pii_anonymizer: workflow=%s — %d entiteit(en) geanonimiseerd met herstelbare mapping (%s)",
+        workflow or "default",
+        len(resolved),
+        ", ".join(sorted({r.entity_type for r in resolved})),
+    )
+
+    return "".join(pieces), mapping
+
+
+# Matches any anonymization-placeholder-shaped token: "<", one or more
+# uppercase letters/hyphens (covers every _REPLACEMENTS value, including
+# "E-MAILADRES"/"IP-ADRES"), an optional "_<digits>" counter suffix (see
+# anonymize_text_with_mapping() above), then ">". Intentionally generic —
+# it is the safety net in restore_placeholders() below, so it must catch
+# any placeholder-shaped token, not only the ones this module itself knows
+# how to produce.
+_PLACEHOLDER_RE = re.compile(r"<[A-Z][A-Z\-]*(?:_\d+)?>")
+
+# Shown instead of a placeholder that restore_placeholders() cannot resolve
+# — short, neutral, and content-free (reveals neither the entity type nor
+# any real value), so it never looks like a broken internal artefact leaking
+# through to client-facing text.
+_UNRESOLVED_PLACEHOLDER_FILLER = "[omitted]"
+
+
+def restore_placeholders(text: str, mapping: Dict[str, str]) -> str:
+    """Zet anonimiseringsplaceholders in `text` terug naar hun originele
+    waarde, met de mapping van de bijbehorende `anonymize_text_with_mapping()`-
+    aanroep.
+
+    Veilig omdat dit alleen data teruggeeft aan dezelfde aanvraag/gebruiker
+    die 'm zelf heeft aangeleverd — er gaat niets nieuws naar een andere
+    partij. `text` en `mapping` moeten lokaal blijven bij die ene
+    aanvraag/response; de mapping bevat de originele persoonsgegevens en
+    mag nooit gelogd, opgeslagen of naar Sentry gestuurd worden.
+
+    Vangnet: een placeholder-vormig token in `text` dat GEEN sleutel is in
+    `mapping` (bijv. omdat de LLM het parafraseerde, afkapte, of zelf een
+    nieuwe placeholder verzon) wordt nooit ruw getoond — het wordt
+    vervangen door een neutrale, inhoudsloze tekst. Dit geldt ook als
+    `mapping` leeg is (dan is elk gevonden token per definitie onbekend).
+    Het gebeuren wordt gelogd met alleen het aantal en de placeholder-naam
+    zelf (bijv. "<LOCATIE_2>") — nooit de omringende tekst of een waarde.
+    """
+    if not text:
+        return text
+
+    mapping = mapping or {}
+    unresolved_tags = sorted({tag for tag in _PLACEHOLDER_RE.findall(text) if tag not in mapping})
+
+    restored = _PLACEHOLDER_RE.sub(
+        lambda m: mapping.get(m.group(0), _UNRESOLVED_PLACEHOLDER_FILLER), text
+    )
+
+    if unresolved_tags:
+        logger.warning(
+            "pii_anonymizer: %d onopgeloste placeholder(s) na terugzetten (%s) — vervangen, niet ruw getoond",
+            len(unresolved_tags),
+            ", ".join(unresolved_tags),
+        )
+
+    return restored
 
 
 # Fixed, obviously fake sentence used only by warm_up(); covers both

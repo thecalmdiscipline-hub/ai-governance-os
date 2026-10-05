@@ -228,8 +228,18 @@ def _identity_anonymize_text(text, workflow=None):
     return text
 
 
+def _identity_anonymize_text_with_mapping(text, workflow=None):
+    # Mirrors _identity_anonymize_text above: quote_contract_generator (the
+    # only caller so far) calls anonymize_text_with_mapping() instead of
+    # anonymize_text(), so it needs its own identity mock here or it would
+    # fall through to the real, slow, model-loading implementation by
+    # default. No PII to find in a passthrough, so the mapping is empty.
+    return text, {}
+
+
 def mock_pii_unavailable(monkeypatch, message="PII-anonimisering is niet beschikbaar (test)"):
-    """Make the next anonymize_text() call raise PIIAnonymizerUnavailable.
+    """Make the next anonymize_text()/anonymize_text_with_mapping() call
+    raise PIIAnonymizerUnavailable.
 
     Use this to assert a workflow's fail-closed behaviour: it must return a
     "degraded" response and must NEVER fall back to sending unanonymized
@@ -241,6 +251,7 @@ def mock_pii_unavailable(monkeypatch, message="PII-anonimisering is niet beschik
         raise pii_anonymizer.PIIAnonymizerUnavailable(message)
 
     monkeypatch.setattr(pii_anonymizer, "anonymize_text", _raise)
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text_with_mapping", _raise)
 
 
 @pytest.fixture(autouse=True)
@@ -248,6 +259,7 @@ def _mock_pii_anonymizer_by_default(monkeypatch):
     from app.core import pii_anonymizer
 
     monkeypatch.setattr(pii_anonymizer, "anonymize_text", _identity_anonymize_text)
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text_with_mapping", _identity_anonymize_text_with_mapping)
     yield
 
 
