@@ -31,3 +31,6 @@ venv/
 BUILD_SHA
 
 uploaded_documents/
+
+# Demo collateral (screenshots, clips, audio, PDF, video) — large binaries, never committed.
+demo-assets/
