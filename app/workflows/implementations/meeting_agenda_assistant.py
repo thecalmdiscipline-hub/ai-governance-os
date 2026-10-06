@@ -20,6 +20,20 @@ Output (always returned, even on LLM failure):
   decision_points    : list[str] — key decisions to make in this meeting
   action_items_template : list[str] — action item placeholders to capture
   meeting_summary    : str — brief narrative on meeting purpose and expected outcome
+
+PII handling: the user message (including participant names) is
+anonymised via app.core.pii_anonymizer before being sent to OpenAI.
+preparation_tips[].participant is a particular risk here — the LLM is
+explicitly asked to echo a participant name/role back — so it, along
+with every other LLM-generated free-text field (agenda[].topic/
+desired_outcome/facilitator_notes, preparation_tips[].tips,
+decision_points, action_items_template, meeting_summary), is run through
+pii_anonymizer.restore_placeholders() before being returned — safe
+because it only reveals the requester's own submitted data (participant
+names they themselves supplied) back into the same request (see
+app/core/pii_anonymizer.py and CLAUDE.md §6). The top-level
+title/participants fields are the raw, never-anonymized input values
+echoed straight back, so they need no restore.
 """
 from __future__ import annotations
 
@@ -186,6 +200,33 @@ def _parse_llm_response(
     }
 
 
+def _restore_pii_in_result(result: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    result = dict(result)
+
+    result["agenda"] = [
+        {
+            **item,
+            "topic": restore(item.get("topic", ""), mapping),
+            "desired_outcome": restore(item.get("desired_outcome", ""), mapping),
+            "facilitator_notes": restore(item.get("facilitator_notes", ""), mapping),
+        }
+        for item in result.get("agenda", [])
+    ]
+    result["preparation_tips"] = [
+        {
+            "participant": restore(p.get("participant", ""), mapping),
+            "tips": [restore(t, mapping) for t in p.get("tips", [])],
+        }
+        for p in result.get("preparation_tips", [])
+    ]
+    result["decision_points"] = [restore(d, mapping) for d in result.get("decision_points", [])]
+    result["action_items_template"] = [restore(a, mapping) for a in result.get("action_items_template", [])]
+    result["meeting_summary"] = restore(result.get("meeting_summary", ""), mapping)
+
+    return result
+
+
 def _fallback_agenda(title: str, duration_min: int, participants: List[str], reason: str) -> Dict[str, Any]:
     wrap = min(5, duration_min)
     main = duration_min - wrap
@@ -237,7 +278,9 @@ def meeting_agenda_assistant(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="meeting_agenda_assistant")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="meeting_agenda_assistant"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -252,6 +295,7 @@ def meeting_agenda_assistant(
 
         raw_content = response.choices[0].message.content or ""
         result = _parse_llm_response(raw_content, title, duration_min, participants)
+        result = _restore_pii_in_result(result, pii_mapping)
 
         logger.info(
             "meeting_agenda_assistant: LLM call succeeded — agenda_id=%s blocks=%d decisions=%d",

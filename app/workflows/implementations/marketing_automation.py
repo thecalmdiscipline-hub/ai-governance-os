@@ -18,6 +18,17 @@ Output (always returned, even on LLM failure):
   strategy           : {summary, messaging, channels}
   timing             : {launch_recommendation, frequency, duration}
   roi_estimate       : {direction, rationale, expected_metrics}
+
+PII handling: the user message (campaign brief) is anonymised via
+app.core.pii_anonymizer before being sent to OpenAI. The LLM-generated
+free-text fields (actions, strategy.summary/messaging/channels, timing.*,
+roi_estimate.rationale/expected_metrics) can echo an anonymization
+placeholder back, so each is run through
+pii_anonymizer.restore_placeholders() before being returned — safe
+because it only reveals the requester's own submitted data back into the
+same request (see app/core/pii_anonymizer.py and CLAUDE.md §6). The
+top-level campaign/audience fields are the raw, never-anonymized input
+values echoed straight back, so they need no restore.
 """
 from __future__ import annotations
 
@@ -141,6 +152,35 @@ def _parse_llm_response(content: str, campaign: str, audience: str) -> Dict[str,
     }
 
 
+def _restore_pii_in_result(result: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    result = dict(result)
+    result["actions"] = [restore(a, mapping) for a in result.get("actions", [])]
+
+    strategy = dict(result.get("strategy") or {})
+    strategy["summary"] = restore(strategy.get("summary", ""), mapping)
+    strategy["channels"] = [restore(c, mapping) for c in strategy.get("channels", [])]
+    messaging = dict(strategy.get("messaging") or {})
+    messaging["headline"] = restore(messaging.get("headline", ""), mapping)
+    messaging["value_proposition"] = restore(messaging.get("value_proposition", ""), mapping)
+    messaging["call_to_action"] = restore(messaging.get("call_to_action", ""), mapping)
+    strategy["messaging"] = messaging
+    result["strategy"] = strategy
+
+    timing = dict(result.get("timing") or {})
+    timing["launch_recommendation"] = restore(timing.get("launch_recommendation", ""), mapping)
+    timing["frequency"] = restore(timing.get("frequency", ""), mapping)
+    timing["duration"] = restore(timing.get("duration", ""), mapping)
+    result["timing"] = timing
+
+    roi_estimate = dict(result.get("roi_estimate") or {})
+    roi_estimate["rationale"] = restore(roi_estimate.get("rationale", ""), mapping)
+    roi_estimate["expected_metrics"] = [restore(m, mapping) for m in roi_estimate.get("expected_metrics", [])]
+    result["roi_estimate"] = roi_estimate
+
+    return result
+
+
 def _fallback_result(campaign: str, audience: str, reason: str) -> Dict[str, Any]:
     return {
         "campaign": campaign or "Unnamed campaign",
@@ -183,7 +223,9 @@ def marketing_automation(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="marketing_automation")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="marketing_automation"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -198,6 +240,7 @@ def marketing_automation(
 
         raw_content = response.choices[0].message.content or ""
         result = _parse_llm_response(raw_content, campaign, audience)
+        result = _restore_pii_in_result(result, pii_mapping)
 
         logger.info(
             "marketing_automation: LLM call succeeded — campaign=%s channels=%d roi=%s",
