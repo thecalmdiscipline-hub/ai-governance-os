@@ -15,6 +15,27 @@ Output (always returned, even on LLM failure):
     confidence       : "high" | "medium" | "low"
     document_snippets: list[{document, snippet}]
     auto_selected_documents: bool
+
+PII handling: the user message (the question plus the content of every
+loaded document) is anonymised via app.core.pii_anonymizer before being
+sent to OpenAI. The documents come from this organization's own Document
+table (app/models/document.py), not from the requesting user personally
+— but every member of an organization can already query any document in
+that same organization through this very workflow (and see it raw,
+unredacted, in answer.document_snippets below, which is built from the
+ORIGINAL document text, never anonymized — see _load_documents() /
+the loop below). Restoring a placeholder in the AI-generated answer
+therefore exposes nothing a member of this organization could not
+already see by the normal use of this same endpoint; the trust boundary
+here, as everywhere else in this codebase, is organization membership,
+not "the one user who happened to upload the file". answer.summary and
+answer.reasoning are the LLM's own free text and are run through
+pii_anonymizer.restore_placeholders() before being returned (see
+app/core/pii_anonymizer.py and CLAUDE.md §6). confidence/sources_used/
+top_sources/document_snippets/auto_selected_documents are either enums,
+filtered against known filenames, or (for document_snippets) the raw
+original text — none of them pass through the LLM's own free-text
+output, so none need restore.
 """
 from __future__ import annotations
 
@@ -214,7 +235,9 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(question, doc_contents)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="document_knowledge")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="document_knowledge"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -229,6 +252,8 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         raw_content = response.choices[0].message.content or ""
         parsed = _parse_llm_response(raw_content)
+        parsed["answer"] = pii_anonymizer.restore_placeholders(parsed["answer"], pii_mapping)
+        parsed["reasoning"] = pii_anonymizer.restore_placeholders(parsed["reasoning"], pii_mapping)
 
         # Keep only sources the LLM cited that we actually loaded
         valid_filenames = {d["filename"] for d in doc_contents}

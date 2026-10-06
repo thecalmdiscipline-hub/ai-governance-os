@@ -17,6 +17,18 @@ Output (always returned, even on LLM failure):
   recommendations    : list[str]
   framework_alignment: list[str]
   summary            : str
+
+PII handling: the user message — including policy_text, which is supplied
+directly in this request's own input, never fetched from a stored
+document — is anonymised via app.core.pii_anonymizer before being sent
+to OpenAI. The LLM-generated free-text fields (summary, recommendations,
+framework_alignment, and findings[].issue/recommendation/framework_ref)
+can echo an anonymization placeholder back, so each is run through
+pii_anonymizer.restore_placeholders() before being returned — safe
+because it only reveals the requester's own submitted policy text back
+into the same request (see app/core/pii_anonymizer.py and CLAUDE.md §6).
+compliance_score/risk_level/issues_found are computed in code, not raw
+LLM text, so they need no restore.
 """
 from __future__ import annotations
 
@@ -130,6 +142,28 @@ def _parse_llm_response(content: str) -> Dict[str, Any]:
     }
 
 
+def _restore_pii_in_output(output: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    output = dict(output)
+    output["summary"] = restore(output.get("summary", ""), mapping)
+    output["recommendations"] = [restore(r, mapping) for r in output.get("recommendations", []) if isinstance(r, str)]
+    output["framework_alignment"] = [restore(f, mapping) for f in output.get("framework_alignment", []) if isinstance(f, str)]
+    output["findings"] = [
+        {
+            **finding,
+            **{
+                key: restore(finding[key], mapping)
+                for key in ("issue", "severity", "framework_ref", "recommendation")
+                if isinstance(finding.get(key), str)
+            },
+        }
+        if isinstance(finding, dict)
+        else finding
+        for finding in output.get("findings", [])
+    ]
+    return output
+
+
 def _fallback_response(reason: str) -> Dict[str, Any]:
     return {
         "compliance_score": None,
@@ -162,7 +196,9 @@ def compliance_monitoring(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data, context)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="compliance_monitoring")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="compliance_monitoring"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -177,6 +213,7 @@ def compliance_monitoring(
 
         raw_content = response.choices[0].message.content or ""
         output = _parse_llm_response(raw_content)
+        output = _restore_pii_in_output(output, pii_mapping)
 
         logger.info(
             "compliance_monitoring: LLM call succeeded — score=%s risk=%s issues=%d",

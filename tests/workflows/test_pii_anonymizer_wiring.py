@@ -5,11 +5,16 @@ sending raw, unanonymized text) when the anonymizer itself is unavailable.
 This is the test that directly backs the "Geen AVG-anonimisering vóór
 LLM-calls" risico fix in CLAUDE.md §5: it does not test Presidio's
 detection quality (see tests/test_pii_anonymizer.py for that) — it tests
-the WIRING, i.e. that app.core.pii_anonymizer.anonymize_text() (or, for
-quote_contract_generator since 2026-10-05, anonymize_text_with_mapping() —
-see that test for why) is on the path between `_build_user_message(...)`
-and every `client.chat.completions.create(...)` call, for all 10
-workflows, with no exceptions.
+the WIRING, i.e. that app.core.pii_anonymizer.anonymize_text_with_mapping()
+is on the path between `_build_user_message(...)` and every
+`client.chat.completions.create(...)` call, for all 10 workflows, with no
+exceptions. Every workflow now uses anonymize_text_with_mapping() (not
+plain anonymize_text()) since Batch J (2026-10-06): each one hands at
+least some LLM-generated free text back to the client, so each needs the
+restorable mapping to undo any anonymization placeholder the LLM might
+echo back — see app/core/pii_anonymizer.py's module docstring and
+CLAUDE.md §6 for the full rationale, and each workflow module's own
+docstring for exactly which output fields it restores.
 
 Uses the same `import openai; openai.OpenAI(...)` — style patching as the
 existing `mock_openai_response()` helper in conftest.py, plus
@@ -122,12 +127,10 @@ def test_workflow_calls_anonymize_text_with_its_own_workflow_key(monkeypatch, mo
         calls.append(workflow)
         return text
 
-    # quote_contract_generator hands the LLM's own free-text response back
-    # to the client (every other workflow here doesn't), so — since
-    # 2026-10-05 — it calls anonymize_text_with_mapping() instead of
-    # anonymize_text(), so it can restore any placeholder the LLM echoes
-    # back (see CLAUDE.md §6 and app/core/pii_anonymizer.py). Spy on
-    # whichever one this workflow is actually wired to.
+    # Every workflow calls anonymize_text_with_mapping() (see the module
+    # docstring above) — this spy is kept alongside plain anonymize_text()
+    # only so this one test file still catches it immediately if a future
+    # workflow is ever wired to the plain, non-restorable call instead.
     def _spy_with_mapping(text, workflow=None):
         calls.append(workflow)
         return text, {}
@@ -201,11 +204,15 @@ def test_document_knowledge_calls_anonymize_text_with_its_own_workflow_key(monke
 
     calls = []
 
-    def _spy(text, workflow=None):
+    def _spy_with_mapping(text, workflow=None):
         calls.append(workflow)
-        return text
+        return text, {}
 
-    monkeypatch.setattr(pii_anonymizer, "anonymize_text", _spy)
+    # document_knowledge hands the LLM's own free-text answer back to the
+    # client (see its module docstring), so like every other workflow since
+    # Batch J it calls anonymize_text_with_mapping(), not plain
+    # anonymize_text() — spy on the one it actually uses.
+    monkeypatch.setattr(pii_anonymizer, "anonymize_text_with_mapping", _spy_with_mapping)
 
     from app.workflows.implementations.document_knowledge import run
 

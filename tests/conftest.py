@@ -229,11 +229,14 @@ def _identity_anonymize_text(text, workflow=None):
 
 
 def _identity_anonymize_text_with_mapping(text, workflow=None):
-    # Mirrors _identity_anonymize_text above: quote_contract_generator (the
-    # only caller so far) calls anonymize_text_with_mapping() instead of
-    # anonymize_text(), so it needs its own identity mock here or it would
-    # fall through to the real, slow, model-loading implementation by
-    # default. No PII to find in a passthrough, so the mapping is empty.
+    # Mirrors _identity_anonymize_text above. Every workflow calls
+    # anonymize_text_with_mapping() (not plain anonymize_text()) since
+    # Batch J (2026-10-06) — each one hands at least some LLM-generated free
+    # text back to the client and needs the restorable mapping to undo any
+    # anonymization placeholder the LLM might echo back (see CLAUDE.md §6).
+    # Without this identity mock they would all fall through to the real,
+    # slow, model-loading implementation by default. No PII to find in a
+    # passthrough, so the mapping is empty.
     return text, {}
 
 
