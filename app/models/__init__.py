@@ -18,6 +18,14 @@ from app.models.tenant_module import TenantModule
 from app.models.provisioning_request import ProvisioningRequest
 from app.models.support_request import SupportRequest
 
+# Batch I, Fase 2.1 + 2.2: accounts and onboarding (HQ-only, /ops/* — see app/api/ops_accounts.py,
+# app/api/ops_onboarding.py)
+from app.models.ops_account import OpsAccount
+from app.models.onboarding_template import OnboardingTemplate
+from app.models.onboarding_template_task import OnboardingTemplateTask
+from app.models.onboarding_project import OnboardingProject
+from app.models.onboarding_task import OnboardingTask
+
 # Outbound Engine models
 from app.outbound.models.company import OutboundCompany
 from app.outbound.models.prospect import OutboundProspect
