@@ -19,6 +19,23 @@ Output (always returned, even on LLM failure):
   total_amount       : Final total including VAT
   anomalies          : list[str] — missing fields or irregularities flagged
   summary            : Short narrative description of the invoice
+
+PII handling: the invoice text is anonymised via app.core.pii_anonymizer
+before being sent to OpenAI — using this workflow's reduced entity set
+(no PERSON/LOCATION, see ENTITY_SETS["invoice_processing"] in
+pii_anonymizer.py; strong individual identifiers like e-mail/IBAN/phone/
+BSN are still anonymized). Every field the LLM extracts from that text
+(invoice_number, invoice_date, vendor.name/address/vat_number,
+line_items[].description, anomalies, summary) is run through
+pii_anonymizer.restore_placeholders() before being returned, in case any
+of the still-anonymized identifiers above happened to land inside one of
+them (e.g. an IBAN embedded in a vendor address) — safe because it only
+reveals the requester's own submitted invoice text back into the same
+request (see app/core/pii_anonymizer.py and CLAUDE.md §6). The purely
+computed numeric fields (currency, subtotal, vat_rate, vat_amount,
+total_amount, detected_amounts, line_item_count) are parsed to
+int/float/str in code, not raw LLM text, so they cannot contain a
+placeholder and need no restore.
 """
 from __future__ import annotations
 
@@ -159,6 +176,30 @@ def _parse_llm_response(content: str) -> Dict[str, Any]:
     }
 
 
+def _restore_pii_in_result(result: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    # restore_placeholders() returns falsy/None input unchanged (see its own
+    # "if not text: return text" guard), so these fields — which may
+    # legitimately be None when the LLM found nothing to extract — can be
+    # passed through unconditionally without a None-check here.
+    restore = pii_anonymizer.restore_placeholders
+    result = dict(result)
+    result["invoice_number"] = restore(result.get("invoice_number"), mapping)
+    result["invoice_date"] = restore(result.get("invoice_date"), mapping)
+
+    vendor = dict(result.get("vendor") or {})
+    for key in ("name", "address", "vat_number"):
+        vendor[key] = restore(vendor.get(key), mapping)
+    result["vendor"] = vendor
+
+    result["line_items"] = [
+        {**item, "description": restore(item.get("description", ""), mapping)}
+        for item in result.get("line_items", [])
+    ]
+    result["anomalies"] = [restore(a, mapping) for a in result.get("anomalies", [])]
+    result["summary"] = restore(result.get("summary", ""), mapping)
+    return result
+
+
 def _fallback_result(invoice_text: str, reason: str) -> Dict[str, Any]:
     return {
         "invoice_number": None,
@@ -203,7 +244,9 @@ def invoice_processing(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(invoice_text)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="invoice_processing")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="invoice_processing"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -218,6 +261,7 @@ def invoice_processing(
 
         raw_content = response.choices[0].message.content or ""
         result = _parse_llm_response(raw_content)
+        result = _restore_pii_in_result(result, pii_mapping)
 
         logger.info(
             "invoice_processing: LLM call succeeded — invoice=%s total=%s %s anomalies=%d",
