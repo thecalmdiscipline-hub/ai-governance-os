@@ -22,6 +22,18 @@ Output (always returned, even on LLM failure):
   strengths          : list[str] — strongest signals for this lead
   weaknesses         : list[str] — gaps or risk factors
   summary            : str — brief narrative on the lead
+
+PII handling: the user message (built from the anonymised lead data) is
+anonymised via app.core.pii_anonymizer before being sent to OpenAI. The
+LLM-generated narrative fields above (summary, strengths, weaknesses,
+next_actions) can echo an anonymization placeholder (e.g. a lead's own
+name or location) back into its free text, so before returning they are
+each run through pii_anonymizer.restore_placeholders() using the mapping
+from this one request's anonymize_text_with_mapping() call. This is safe:
+it only reveals the requester's own submitted lead data back into the
+same request that supplied it — see app/core/pii_anonymizer.py and
+CLAUDE.md §6 for the full rationale (added 2026-10-06, Batch J, mirroring
+the mechanism already in place for quote_contract_generator).
 """
 from __future__ import annotations
 
@@ -179,6 +191,18 @@ def _parse_llm_response(content: str) -> Dict[str, Any]:
     }
 
 
+def _restore_pii_in_result(result: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    """Restores anonymization placeholders in every LLM-generated free-text
+    field of `result` — see the module docstring's PII-handling note."""
+    restore = pii_anonymizer.restore_placeholders
+    result = dict(result)
+    result["summary"] = restore(result.get("summary", ""), mapping)
+    result["strengths"] = [restore(s, mapping) for s in result.get("strengths", [])]
+    result["weaknesses"] = [restore(w, mapping) for w in result.get("weaknesses", [])]
+    result["next_actions"] = [restore(a, mapping) for a in result.get("next_actions", [])]
+    return result
+
+
 def _fallback_result(reason: str) -> Dict[str, Any]:
     return {
         "score": None,
@@ -210,7 +234,9 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp, payload)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="sales_lead_qualification")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="sales_lead_qualification"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -225,6 +251,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         raw_content = response.choices[0].message.content or ""
         result = _parse_llm_response(raw_content)
+        result = _restore_pii_in_result(result, pii_mapping)
 
         logger.info(
             "sales_lead_qualification: LLM call succeeded — score=%s qualification=%s",

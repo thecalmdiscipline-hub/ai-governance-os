@@ -16,6 +16,16 @@ Output (always returned, even on LLM failure):
   status             : "ok" | "degraded"
   candidates         : list[{name, role, score, recommendation, strengths, concerns, interview_questions}]
   summary            : str — brief narrative on the candidate's overall fit
+
+PII handling: the user message (candidate name, CV, motivation, notes) is
+anonymised via app.core.pii_anonymizer before being sent to OpenAI. The
+LLM-generated free-text fields (strengths, concerns, interview_questions,
+summary) can echo an anonymization placeholder back, so each is run
+through pii_anonymizer.restore_placeholders() before being returned — safe
+because it only reveals the requester's own submitted candidate data back
+into the same request (see app/core/pii_anonymizer.py and CLAUDE.md §6).
+candidate["name"]/["role"] are the raw, never-anonymized input values (the
+LLM never echoes them back), so they need no restore.
 """
 from __future__ import annotations
 
@@ -142,6 +152,16 @@ def _parse_llm_response(content: str, candidate_name: str, role: str) -> Dict[st
     }
 
 
+def _restore_pii_in_candidate(candidate: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    candidate = dict(candidate)
+    candidate["strengths"] = [restore(s, mapping) for s in candidate.get("strengths", [])]
+    candidate["concerns"] = [restore(c, mapping) for c in candidate.get("concerns", [])]
+    candidate["interview_questions"] = [restore(q, mapping) for q in candidate.get("interview_questions", [])]
+    candidate["summary"] = restore(candidate.get("summary", ""), mapping)
+    return candidate
+
+
 def _fallback_candidate(candidate_name: str, role: str, reason: str) -> Dict[str, Any]:
     return {
         "name": candidate_name or "Unknown candidate",
@@ -186,7 +206,9 @@ def hr_recruitment(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="hr_recruitment")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="hr_recruitment"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -201,6 +223,7 @@ def hr_recruitment(
 
         raw_content = response.choices[0].message.content or ""
         candidate = _parse_llm_response(raw_content, candidate_name, role)
+        candidate = _restore_pii_in_candidate(candidate, pii_mapping)
 
         logger.info(
             "hr_recruitment: LLM call succeeded — candidate=%s role=%s score=%s recommendation=%s",

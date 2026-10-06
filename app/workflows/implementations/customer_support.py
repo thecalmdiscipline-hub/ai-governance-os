@@ -17,6 +17,16 @@ Output (always returned, even on LLM failure):
     urgency_reason   : Why this urgency level was assigned
     suggested_action : Concrete next step for the support agent
     summary          : Brief executive summary of the problem
+
+PII handling: the user message is anonymised via app.core.pii_anonymizer
+before being sent to OpenAI. triage.urgency_reason/suggested_action/summary
+are LLM-generated free text that can echo an anonymization placeholder
+(e.g. the customer's own name) back, so each is run through
+pii_anonymizer.restore_placeholders() before being returned — safe because
+it only reveals the requester's own submitted data back into the same
+request (see app/core/pii_anonymizer.py and CLAUDE.md §6). triage.issue is
+the raw, never-anonymized input string (the LLM never echoes it back), so
+it needs no restore.
 """
 from __future__ import annotations
 
@@ -90,6 +100,15 @@ def _parse_llm_response(content: str, issue: str) -> Dict[str, Any]:
     }
 
 
+def _restore_pii_in_triage(triage: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    triage = dict(triage)
+    triage["urgency_reason"] = restore(triage.get("urgency_reason", ""), mapping)
+    triage["suggested_action"] = restore(triage.get("suggested_action", ""), mapping)
+    triage["summary"] = restore(triage.get("summary", ""), mapping)
+    return triage
+
+
 def _fallback_triage(issue: str, reason: str) -> Dict[str, Any]:
     return {
         "issue": issue or "unknown_issue",
@@ -125,7 +144,9 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="customer_support")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="customer_support"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -140,6 +161,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         raw_content = response.choices[0].message.content or ""
         triage = _parse_llm_response(raw_content, issue)
+        triage = _restore_pii_in_triage(triage, pii_mapping)
 
         logger.info(
             "customer_support: LLM call succeeded — ticket=%s priority=%s",

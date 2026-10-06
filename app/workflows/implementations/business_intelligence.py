@@ -19,6 +19,16 @@ Output (always returned, even on LLM failure):
     action_items     : list[str] — concrete immediate next steps
     risks            : list[str] — key risks to be aware of
   summary            : Mirror of insights.summary
+
+PII handling: the user message is anonymised via app.core.pii_anonymizer
+before being sent to OpenAI. The LLM-generated free-text fields (summary,
+kpis, recommendations, action_items, risks) can echo an anonymization
+placeholder back, so each is run through
+pii_anonymizer.restore_placeholders() before being returned — safe
+because it only reveals the requester's own submitted data back into the
+same request (see app/core/pii_anonymizer.py and CLAUDE.md §6).
+question_received is the raw, never-anonymized input value, so it needs
+no restore.
 """
 from __future__ import annotations
 
@@ -113,6 +123,17 @@ def _parse_llm_response(content: str, question: str) -> Dict[str, Any]:
     }
 
 
+def _restore_pii_in_insights(insights: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    restore = pii_anonymizer.restore_placeholders
+    insights = dict(insights)
+    insights["summary"] = restore(insights.get("summary", ""), mapping)
+    insights["kpis"] = [restore(k, mapping) for k in insights.get("kpis", [])]
+    insights["recommendations"] = [restore(r, mapping) for r in insights.get("recommendations", [])]
+    insights["action_items"] = [restore(a, mapping) for a in insights.get("action_items", [])]
+    insights["risks"] = [restore(r, mapping) for r in insights.get("risks", [])]
+    return insights
+
+
 def _fallback_insights(question: str, reason: str) -> Dict[str, Any]:
     return {
         "focus_area": "general",
@@ -156,7 +177,9 @@ def business_intelligence(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data, context)
-        user_message = pii_anonymizer.anonymize_text(user_message, workflow="business_intelligence")
+        user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
+            user_message, workflow="business_intelligence"
+        )
 
         response = client.chat.completions.create(
             model=_MODEL,
@@ -171,6 +194,7 @@ def business_intelligence(
 
         raw_content = response.choices[0].message.content or ""
         insights = _parse_llm_response(raw_content, question)
+        insights = _restore_pii_in_insights(insights, pii_mapping)
 
         logger.info(
             "business_intelligence: LLM call succeeded — focus=%s priority=%s kpis=%d recommendations=%d",
