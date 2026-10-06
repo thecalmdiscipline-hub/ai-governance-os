@@ -138,8 +138,10 @@ step "Creating Python virtual environment"
 if [[ ! -d "$PROJECT_DIR/venv" ]]; then
     sudo -u "$APP_USER" python3 -m venv "$PROJECT_DIR/venv"
 fi
-sudo -u "$APP_USER" "$PROJECT_DIR/venv/bin/pip" install --quiet --upgrade pip
-sudo -u "$APP_USER" "$PROJECT_DIR/venv/bin/pip" install --quiet -r "$PROJECT_DIR/requirements.txt"
+# --no-cache-dir: see the same note in scripts/deploy.sh (Batch K, 2026-10-06) — a fresh setup is
+# the one time this cache would otherwise start growing from zero.
+sudo -u "$APP_USER" "$PROJECT_DIR/venv/bin/pip" install --quiet --no-cache-dir --upgrade pip
+sudo -u "$APP_USER" "$PROJECT_DIR/venv/bin/pip" install --quiet --no-cache-dir -r "$PROJECT_DIR/requirements.txt"
 ok "Virtual environment ready"
 
 # ---------------------------------------------------------------------------

@@ -112,8 +112,12 @@ fi
 # Step 2 — Dependencies
 # ---------------------------------------------------------------------------
 step "Installing Python dependencies"
-$PIP install --quiet --upgrade pip
-$PIP install --quiet -r requirements.txt
+# --no-cache-dir: every deploy ran pip install unconditionally with pip's default cache on, which
+# grew /root/.cache/pip to 65GB over many deploys and once broke a deploy with "No space left on
+# device" (Batch J/K, 2026-10-06, see CLAUDE.md §5). Deploys are infrequent enough that the
+# re-download cost is negligible next to never filling the disk again.
+$PIP install --quiet --no-cache-dir --upgrade pip
+$PIP install --quiet --no-cache-dir -r requirements.txt
 ok "Dependencies installed"
 
 # ---------------------------------------------------------------------------
