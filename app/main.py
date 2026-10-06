@@ -132,6 +132,8 @@ from app.api.documents import router as documents_router
 from app.api.governance import router as governance_router
 from app.api.mfa import router as mfa_router
 from app.api.ops import router as ops_router
+from app.api.ops_accounts import router as ops_accounts_router
+from app.api.ops_onboarding import router as ops_onboarding_router
 from app.api.ops_provisioning import router as ops_provisioning_router
 from app.api.ops_support import router as ops_support_router
 from app.api.support_requests import router as support_requests_router
@@ -144,6 +146,8 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(mfa_router)
 app.include_router(ops_router)
+app.include_router(ops_accounts_router)
+app.include_router(ops_onboarding_router)
 app.include_router(ops_provisioning_router)
 app.include_router(ops_support_router)
 app.include_router(support_requests_router)
