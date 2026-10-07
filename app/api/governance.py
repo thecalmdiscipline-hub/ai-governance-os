@@ -15,6 +15,7 @@ from app.api.dependencies import (
     get_org_scoped_org,
     get_org_scoped_system,
     get_org_scoped_risk,
+    get_org_scoped_incident,
     get_org_scoped_action,
 )
 from app.core.audit import create_audit_log
@@ -31,7 +32,7 @@ from app.models import (
     ProductionApproval,
 )
 from app.models.user import User
-from app.schemas.ai_incident import AIIncidentResponse
+from app.schemas.ai_incident import AIIncidentCreate, AIIncidentResponse, AIIncidentUpdate
 from app.schemas.ai_policy import AIPolicyCreate, AIPolicyResponse
 from app.schemas.ai_risk import AIRiskCreate, AIRiskResponse
 from app.schemas.ai_system import AISystemCreate, AISystemResponse, AISystemUpdate
@@ -574,6 +575,86 @@ def delete_ai_risk(
     risk.is_deleted = True
     db.commit()
     return {"message": "Risk deleted"}
+
+
+# -------------------------
+# INCIDENTS (Batch O1, 2026-10-07)
+# -------------------------
+# Same path prefix as the existing GET /ai-incidents list (Batch L Deel B) — the hand-off's own
+# text said "POST /incidents", but that would split one resource across two different URL
+# prefixes; deliberately kept consistent with what already exists instead.
+
+@router.post("/ai-incidents", response_model=AIIncidentResponse)
+def create_incident(
+    incident: AIIncidentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    system = get_org_scoped_system(incident.ai_system_id, current_user, db)
+
+    db_incident = AIIncident(
+        title=incident.title,
+        description=incident.description,
+        severity=incident.severity,
+        ai_system_id=system.id,
+        detected_at=incident.detected_at or datetime.utcnow(),
+    )
+    db.add(db_incident)
+    db.commit()
+    db.refresh(db_incident)
+
+    create_audit_log(
+        db=db,
+        organization_id=system.organization_id,
+        entity_type="ai_incident",
+        entity_id=db_incident.id,
+        action="incident_created",
+        details="AIIncident created",
+        performed_by=current_user.username,
+    )
+
+    return db_incident
+
+
+@router.patch("/ai-incidents/{incident_id}", response_model=AIIncidentResponse)
+def update_incident(
+    incident_id: int,
+    update: AIIncidentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    incident = get_org_scoped_incident(incident_id, current_user, db)
+
+    changed_fields = []
+    if update.title is not None:
+        incident.title = update.title
+        changed_fields.append("title")
+    if update.description is not None:
+        incident.description = update.description
+        changed_fields.append("description")
+    if update.severity is not None:
+        incident.severity = update.severity
+        changed_fields.append("severity")
+    if update.status is not None:
+        old_status = incident.status
+        incident.status = update.status
+        changed_fields.append(f"status:{old_status}->{update.status}")
+
+    db.commit()
+
+    # Audit details never carry title/description/severity text — only which fields changed
+    # (by name) and, for a status change specifically, the old/new status values themselves.
+    create_audit_log(
+        db=db,
+        organization_id=incident.ai_system.organization_id,
+        entity_type="ai_incident",
+        entity_id=incident.id,
+        action="incident_updated",
+        details=", ".join(changed_fields) if changed_fields else "no fields changed",
+        performed_by=current_user.username,
+    )
+
+    return incident
 
 
 # -------------------------

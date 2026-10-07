@@ -9,7 +9,7 @@ from app.core.config import get_hq_organization_id
 from app.db.session import SessionLocal
 from app.core.security import SECRET_KEY, ALGORITHM
 from app.models.user import User
-from app.models import Organization, AISystem, AIRisk, CorrectiveAction
+from app.models import Organization, AISystem, AIRisk, AIIncident, CorrectiveAction
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -168,6 +168,17 @@ def require_module_access(workflow_key: str) -> Callable:
         return current_user
 
     return checker
+
+
+def get_org_scoped_incident(incident_id: int, current_user: User, db: Session):
+    incident = db.query(AIIncident).join(AISystem).filter(
+        AIIncident.id == incident_id,
+        AISystem.organization_id == current_user.organization_id,
+        AIIncident.is_deleted == False,
+    ).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return incident
 
 
 def get_org_scoped_action(action_id: int, current_user: User, db: Session):
