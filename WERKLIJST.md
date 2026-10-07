@@ -26,7 +26,7 @@ Bijgehouden door Cowork (architect). Claude Code **leest** dit bestand en werkt 
 | 6 | Batch Q (A5): maandrapportage | nog te schrijven door Cowork | WACHT OP COWORK | Regel 5 KLAAR |
 | 7 | Batch P: back-up, herstelproef, schijf- en uptimebewaking | `claude-code-handoff-batch-p-backup-herstelproef-bewaking.md` | WACHT OP DENNIS | Dennis levert de vier punten bovenaan de hand-off |
 | 8 | A6: ISO CERT-video en handout opnieuw (alleen bestaande workflows plus roadmapscène) | nog te schrijven door Cowork | WACHT OP COWORK | Capaciteitscheck door Cowork |
-| 9 | Batch R (A8): CI naar Python 3.12, rate limiting `/ops`, certificaatcheck (alleen lezen) | nog te schrijven door Cowork | WACHT OP COWORK | Regel 2 KLAAR |
+| 9 | Batch R (A8): CI naar Python 3.12, rate limiting `/ops`, certificaatcheck (alleen lezen) | `claude-code-handoff-batch-r-technische-schuld.md` | OPEN | Regel 2 KLAAR (is KLAAR) |
 | 10 | Serverhardening (SSH, fail2ban, kernel-update en één herstart) | nog te schrijven door Cowork | WACHT OP DENNIS | Snapshot en `SNAPSHOT=ja` van Dennis, overdag |
 
 ## HERVAT-BLOK (sjabloon; Claude Code voegt dit toe aan `CLAUDE.md`, bovenaan sectie 7, en houdt het actueel)
