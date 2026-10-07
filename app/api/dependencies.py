@@ -10,7 +10,7 @@ from app.core.config import get_hq_organization_id
 from app.db.session import SessionLocal
 from app.core.security import SECRET_KEY, ALGORITHM
 from app.models.user import User
-from app.models import Organization, AISystem, AIRisk, AIIncident, CorrectiveAction
+from app.models import Organization, AISystem, AIRisk, AIIncident, CorrectiveAction, Evidence
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -215,4 +215,34 @@ def corrective_action_organization_id(action: CorrectiveAction) -> Optional[int]
         return action.ai_risk.ai_system.organization_id
     if action.ai_incident is not None:
         return action.ai_incident.ai_system.organization_id
+    return None
+
+
+def get_org_scoped_evidence(evidence_id: int, current_user: User, db: Session):
+    # Batch O4: Evidence links via ai_system_id OR ai_risk_id (the model has no ai_incident_id —
+    # unlike CorrectiveAction — so this mirrors the existing GET /evidence scoping, not O2's).
+    system_ids = (
+        db.query(AISystem.id)
+        .filter(AISystem.organization_id == current_user.organization_id, AISystem.is_deleted == False)
+    )
+    risk_ids = (
+        db.query(AIRisk.id)
+        .join(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AIRisk.is_deleted == False)
+    )
+    evidence = db.query(Evidence).filter(
+        Evidence.id == evidence_id,
+        or_(Evidence.ai_system_id.in_(system_ids), Evidence.ai_risk_id.in_(risk_ids)),
+    ).first()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return evidence
+
+
+def evidence_organization_id(evidence: Evidence) -> Optional[int]:
+    """The evidence's own tenant, via whichever of ai_system_id/ai_risk_id it has."""
+    if evidence.ai_system is not None:
+        return evidence.ai_system.organization_id
+    if evidence.ai_risk is not None:
+        return evidence.ai_risk.ai_system.organization_id
     return None

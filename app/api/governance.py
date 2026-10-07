@@ -18,6 +18,8 @@ from app.api.dependencies import (
     get_org_scoped_incident,
     get_org_scoped_action,
     corrective_action_organization_id,
+    get_org_scoped_evidence,
+    evidence_organization_id,
 )
 from app.core.audit import create_audit_log
 from app.core.deployment_service import check_deployment_readiness
@@ -42,7 +44,7 @@ from app.schemas.corrective_action import (
     CorrectiveActionResponse,
     CorrectiveActionStatusUpdate,
 )
-from app.schemas.evidence import EvidenceCreate, EvidenceResponse
+from app.schemas.evidence import EvidenceCreate, EvidenceResponse, EvidenceUpdate
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
 
 router = APIRouter(tags=["Governance"])
@@ -879,24 +881,65 @@ def generate_ai_policy(
 # EVIDENCE
 # -------------------------
 
-@router.post("/evidence")
+@router.post("/evidence", response_model=EvidenceResponse)
 def create_evidence(
     evidence_data: EvidenceCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if evidence_data.ai_system_id:
+    if evidence_data.ai_system_id is not None:
         get_org_scoped_system(evidence_data.ai_system_id, current_user, db)
 
-    if evidence_data.ai_risk_id:
+    if evidence_data.ai_risk_id is not None:
         get_org_scoped_risk(evidence_data.ai_risk_id, current_user, db)
 
-    evidence = Evidence(**evidence_data.dict())
+    evidence = Evidence(**evidence_data.model_dump())
     db.add(evidence)
     db.commit()
     db.refresh(evidence)
 
-    return {"evidence_id": evidence.id, "title": evidence.title}
+    create_audit_log(
+        db=db,
+        organization_id=evidence_organization_id(evidence),
+        entity_type="evidence",
+        entity_id=evidence.id,
+        action="evidence_created",
+        details="Evidence created",
+        performed_by=current_user.username,
+    )
+
+    return evidence
+
+
+@router.patch("/evidence/{evidence_id}", response_model=EvidenceResponse)
+def update_evidence(
+    evidence_id: int,
+    update: EvidenceUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    evidence = get_org_scoped_evidence(evidence_id, current_user, db)
+
+    changed_fields = []
+    for field in ("title", "description", "file_reference"):
+        value = getattr(update, field)
+        if value is not None:
+            setattr(evidence, field, value)
+            changed_fields.append(field)
+
+    db.commit()
+
+    create_audit_log(
+        db=db,
+        organization_id=evidence_organization_id(evidence),
+        entity_type="evidence",
+        entity_id=evidence.id,
+        action="evidence_updated",
+        details=", ".join(changed_fields) if changed_fields else "no fields changed",
+        performed_by=current_user.username,
+    )
+
+    return evidence
 
 
 # -------------------------
