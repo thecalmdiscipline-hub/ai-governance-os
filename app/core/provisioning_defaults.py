@@ -13,6 +13,12 @@ from typing import Dict
 
 STANDARD_NOTICE = "Standard template, to be reviewed by the client."
 
+# Shared with app/api/governance.py's POST /ai-policy (generate_ai_policy), which had its own,
+# separately hardcoded copy of the same text until Batch N2 (2026-10-07) — that endpoint found
+# "AI systems are continuously monitored." before this; its other three fields keep their own,
+# shorter wording (no STANDARD_NOTICE prefix), so only this one sentence is shared, not the prefix.
+MONITORING_COMMITMENT_TEXT = "AI systems are reviewed on a regular basis by the organisation; incidents are recorded and followed up."
+
 # ---- AIPolicy (one per organization) --------------------------------------------------------------
 
 def policy_texts(organization_name: str) -> Dict[str, str]:
@@ -24,7 +30,7 @@ def policy_texts(organization_name: str) -> Dict[str, str]:
         # product doesn't make good on (there is no continuous-monitoring feature). Template-only
         # — existing AIPolicy rows keep their original text; see CLAUDE.md §6 for which org ids
         # still have the old wording.
-        "monitoring_commitment": f"{STANDARD_NOTICE} AI systems are reviewed on a regular basis by the organisation; incidents are recorded and followed up.",
+        "monitoring_commitment": f"{STANDARD_NOTICE} {MONITORING_COMMITMENT_TEXT}",
     }
 
 

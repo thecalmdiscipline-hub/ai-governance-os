@@ -19,6 +19,7 @@ from app.api.dependencies import (
 )
 from app.core.audit import create_audit_log
 from app.core.deployment_service import check_deployment_readiness
+from app.core.provisioning_defaults import MONITORING_COMMITMENT_TEXT
 from app.models import (
     AIIncident,
     AIPolicy,
@@ -671,7 +672,10 @@ def generate_ai_policy(
         purpose=f"The organization {org.name} uses AI responsibly.",
         principles="Transparency, Human Oversight, Risk-Based Control.",
         risk_commitment="All AI systems undergo risk assessment.",
-        monitoring_commitment="AI systems are continuously monitored.",
+        # Corrected Batch N2 (2026-10-07): was its own hardcoded "AI systems are continuously
+        # monitored." — the same overclaim app/core/provisioning_defaults.py's monitoring_commitment
+        # had before Batch L Deel B. Now shares that one constant so the two can't drift apart again.
+        monitoring_commitment=MONITORING_COMMITMENT_TEXT,
         organization_id=org.id,
     )
     db.add(generated_policy)
