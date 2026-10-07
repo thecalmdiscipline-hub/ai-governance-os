@@ -5,9 +5,10 @@ voer de eerste regel met status `OPEN` uit waarvan de voorwaarde klaar is, daarn
 sla `WACHT OP DENNIS`/`WACHT OP COWORK` over, werk het HERVAT-BLOK bij na elke stap. Dit document
 bevat geen geheimen of persoonsgegevens.
 
-**Resultaat in één zin:** rijen 1 (Batch O3), 2 (Batch H) en 3 (Batch O2) van `WERKLIJST.md` staan
-nu allemaal op `KLAAR`; er is momenteel geen enkele rij meer met `OPEN` en een voldane voorwaarde —
-de overige rijen wachten op Dennis of op een nog te schrijven hand-off van Cowork.
+**Resultaat in één zin:** rijen 1 (Batch O3), 2 (Batch H), 3 (Batch O2), 4 (Batch O4) en 9 (Batch R)
+van `WERKLIJST.md` staan nu allemaal op `KLAAR`; er is momenteel geen enkele rij meer met `OPEN` en
+een voldane voorwaarde — de overige rijen wachten op Dennis of op een nog te schrijven hand-off van
+Cowork.
 
 ---
 
@@ -80,14 +81,58 @@ al-bestaande O1-testincident), direct zelf gesloten — blijft staan. `/audit/ve
 `valid` voor alle 5 organisaties. Organisatie 2 krijgt een lege lijst en `404` op een poging tegen
 organisatie 1's actie. Headless-browsercheck bevestigt de nieuwe knoppen, nul CSP-violations.
 
+## Rij 4 — Batch O4: evidence aanmaken en bijwerken (metadata, geen bestanden)
+
+Fase 0-afwijking van de hand-off: `Evidence` heeft geen `ai_incident_id`-kolom (alleen
+`ai_system_id`/`ai_risk_id`) — de hand-off se prosa noemde ten onrechte "risico en/of incident",
+een verwarring met O2's patroon. Gebouwd tegen de echte kolommen, geen migratie.
+
+Backend: `POST /evidence` bestond al sinds Batch F maar schreef nooit een auditregel en gaf alleen
+`{evidence_id, title}` terug — nu de volledige respons, verplicht minstens één koppeling, schrijft
+voor het eerst `evidence_created`. Nieuwe `PATCH /evidence/{id}`. `file_reference` hergebruikt als
+vrije tekst ("waar wordt dit bewaard") — nooit een bestand. Portaal: "Add evidence" op een
+AI-systeemrij, een risicorij, en als algemene knop op de Evidence-sectie.
+
+14 nieuwe backendtests, 9 nieuwe frontendtests (+6 bestaande aangepast voor selector-ambiguïteit).
+Backend-suite 462 → 476; portaal-suite 153 → 162. Commits: backend `9ef6634`, portaal `d851a1b`.
+Alle CI/Deploy-runs groen.
+
+Productiecheck: één wegwerp-bewijsstuk aangemaakt op organisatie 1 (gekoppeld aan een echt
+AI-systeem), eenmaal bijgewerkt — blijft staan. `/audit/verify` bevestigd `valid` voor alle 5
+organisaties. Headless-browsercheck toont 29 "Add evidence"-knoppen (organisatie 1's eigen
+register uit Batch N4), nul CSP-violations.
+
+## Rij 9 — Batch R: technische schuld (CI 3.12, rate limiting `/ops/*`, certificaatcheck)
+
+Fase 0-correctie: CI draaide op Python 3.9, niet 3.10 zoals de hand-off stelde — geen stopreden,
+productie draait al sinds lang 3.12.3 met dezelfde dependency-pins.
+
+**R1:** `.github/workflows/ci.yml` naar Python 3.12. Geen dependency-wijziging nodig. **R2:**
+`app/core/rate_limiter.py` gegeneraliseerd (was hardcoded voor `/login`); nieuwe `rate_limit_ops`
+(60/60s per super-admin-gebruikers-id, niet IP), ingehangen in `require_ops_access` — automatisch
+op alle 5 `/ops/*`-routers. **R3:** nieuw `scripts/check_cert_expiry.py` (stdlib, geen nieuwe
+dependency), echt gedraaid tegen de drie productiedomeinen: alle drie 43 dagen resterend.
+
+6 + 8 nieuwe tests. Backend-suite 476 → 482 → 490. Commits: `0c7f464` (R1), `ce42b61` (R2),
+`3a4a5d9` (R3). Alle CI/Deploy-runs groen.
+
+Productiecontrole: `/health`, een gewone `/ops/whoami` en `/ai-systems` geven 200; `/audit/verify`
+`valid` voor alle 5 organisaties. Een bewuste burst van 65 snelle `/ops/whoami`-aanroepen tegen de
+echte productie-API bevestigde het echte gedrag: 59× 200, daarna 429 — exact het verwachte patroon;
+na afkoeling werkte normaal gebruik meteen weer.
+
 ## Niet gedaan / openstaand
 
-- **Batch O4** (evidence aanmaken) en **Batch M** (handout-generator): hand-offs nog niet door
-  Cowork geschreven, status `WACHT OP COWORK` — overgeslagen zoals de werklijst voorschrijft.
+- **Batch M** (handout-generator), **Batch Q** (maandrapportage), **A6** (ISO CERT-video opnieuw):
+  hand-offs nog niet door Cowork geschreven, status `WACHT OP COWORK` — overgeslagen zoals de
+  werklijst voorschrijft.
 - **Batch P** (back-up/herstelproef) en serverhardening: `WACHT OP DENNIS` — hij moet eerst de
   vereiste punten leveren.
 - `claude-code-handoff-reset-admin-passwords.md` blijft bewust ongetrackt op de Mac (zie boven).
+- De lokale dev-venv op de Mac staat nog op Python 3.9 — Batch R vroeg alleen om CI, niet de
+  lokale omgeving.
 
-Geen migraties buiten de expliciet goedgekeurde Batch O2-migratie, geen auth/MFA/ops-code geraakt,
-geen nieuwe organisaties buiten de expliciet goedgekeurde Atlas Demo B.V., geen berichten of e-mail
-verstuurd, geen classifier-blokkade omzeild.
+Geen migraties buiten de expliciet goedgekeurde Batch O2-migratie, geen auth/MFA/ops-code geraakt
+(behalve de bewust toegevoegde rate-limit-check in `require_ops_access`, die geen gedrag van
+bestaande routes verandert), geen nieuwe organisaties buiten de expliciet goedgekeurde Atlas Demo
+B.V., geen berichten of e-mail verstuurd, geen classifier-blokkade omzeild, geen serverwijzigingen.
