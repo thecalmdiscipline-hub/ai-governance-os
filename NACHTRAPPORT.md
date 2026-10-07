@@ -1,112 +1,109 @@
-# Nachtrapport — 2026-10-06 (nacht, zonder toezicht)
+# Nachtrapport — 2026-10-07 (dagrun, zonder toezicht tot 12:30)
 
-Opdracht: "NACHTRUN, geen toezicht. Dennis slaapt. SNAPSHOT=ja" — Batch K (serverhygiëne) uitvoeren,
-en alleen als K gezond is doorgaan naar Batch L (klantzicht op onboardingvoortgang + governance-tab),
-Deel A dan Deel B. Geen migraties, geen nieuwe organisaties provisionen, geen berichten/e-mail, geen
-echte klantacties. Dit document bevat geen geheimen of persoonsgegevens.
+Opdracht: "DAGRUN, geen toezicht tot 12:30. Eén sessie." — lees
+`claude-code-handoff-batch-n-fixes-en-eigen-register.md` en voer N1–N4 uit; alleen als N gezond is
+(tests groen, Deploy groen), lees `claude-code-handoff-batch-o-governance-schrijfkant.md` en voer
+O1, daarna O2, daarna O3 uit. Geen migraties, geen serverwijzigingen, geen nieuwe organisaties, geen
+berichten/e-mail. Dit document bevat geen geheimen of persoonsgegevens.
 
-**Resultaat in één zin:** Batch K volledig klaar; Batch L Deel A volledig klaar en op productie
-geverifieerd; Batch L Deel B niet gestart (geen stopvoorwaarde geraakt — bewuste batchgrens bij het
-aflopen van het contextbudget, een uitkomst die de hand-off zelf toestaat).
-
----
-
-## Batch K — serverhygiëne
-
-Hand-off: `claude-code-handoff-batch-k-serverhygiene.md`.
-
-**K1 — pip-cache structureel gefixt.** `--no-cache-dir` toegevoegd aan alle `pip install`-aanroepen
-die daadwerkelijk op de productieserver draaien (`scripts/deploy.sh`, `scripts/setup_server.sh`).
-Bewust niet aangeraakt: `.github/workflows/ci.yml` (draait op een ophemere GitHub-runner) en
-`scripts/bootstrap_workflows.sh` (dode heredoc-tekst, nooit uitgevoerd). Vóór de fix: pip's eigen
-downloadcache op de server was 4,4 GB en groeide bij elke deploy verder. Ná een deploy met de fix:
-cache bleef exact gelijk — bewezen dat de groei stopt. Eenmalig de resterende, van-vóór-de-fix cache
-opgeruimd (`pip cache purge`): schijf van 20% naar 14% vol.
-Commit `6e5a49d`. CI `37517040475` (success), Deploy `37517281973` (success).
-
-**K2 — testaccount afgesloten.** Account id 2 ("ZZ Provisioning Wizard Test", een wegwerp-testaccount
-uit een eerdere sessie) via de bestaande API op status `lost` gezet en een duidelijke notitie
-toegevoegd ("TESTACCOUNT, niet gebruiken"). Account id 1 (ISO CERT, een echt gebruikt testaccount)
-en alle 4 organisaties bleven ongewijzigd. Geen SQL, geen classifier-blokkade.
-
-**K3 — OS-updates + één herstart (uitgevoerd omdat `SNAPSHOT=ja` was bevestigd).** Alle vooraf-checks
-groen (schijf 14% vol, alle 4 diensten actief, certificaten geldig, `/health` ok). 33 reguliere
-Ubuntu-updates (`apt-get upgrade`, expliciet geen `dist-upgrade`) eerst gesimuleerd (0 te verwijderen,
-4 kernel-metapakketten "kept back" — verwacht gedrag van een gewone `upgrade`, geen stopreden), dan
-echt geïnstalleerd: geen prompts, geen verwijderingen. Eén herstart om 19:19:12 UTC, SSH terug na 35
-seconden. Kernel ging van `6.8.0-139` naar de al-klaarstaande `6.8.0-142`. Na de herstart: alle 4
-diensten actief, `/health` 200 met hetzelfde `build_sha`, site extern bereikbaar, de laatste
-Deploy-workflow opnieuw gedraaid en geslaagd (bewijst dat de pijplijn na de herstart nog werkt).
-Eén benigne, zelf-opgeloste bijzaak: `needrestart` herstartte automatisch Postgres tijdens de
-upgrade, wat `/health` heel even "degraded" liet zien — herstelde zichzelf binnen ~10 seconden zonder
-enige actie.
-
-**Batch K: volledig klaar, geen openstaande problemen.**
+**Resultaat in één zin:** Batch N volledig klaar (N1 t/m N4); Batch O's O1 volledig klaar; O2 en O3
+bewust niet gebouwd — geblokkeerd op een echte schema-beperking (geen migratie uitgevoerd, zoals
+voorgeschreven).
 
 ---
 
-## Batch L, Deel A — klantzicht op onboardingvoortgang
+## Batch N — kleine correcties + Valqerons eigen AI-register
 
-Hand-off: `claude-code-handoff-batch-l-klantzicht-voortgang-governance.md`.
+Hand-off: `claude-code-handoff-batch-n-fixes-en-eigen-register.md`.
 
-Een klant met een lopend onboardingtraject ziet nu op de Home-tab van het portaal een "Onboarding
-progress"-kaart: een voortgangsbalk per fase en een checklist van zijn eigen taken, met een checkbox
-voor de taken die hij zelf mag afvinken.
+**N1 — Engelse taaktitels.** `app/services/onboarding.py` kreeg `CUSTOMER_TASK_TITLES_EN`, een
+`(fase, positie)`-vertaaltabel voor de 14 klantzichtbare `standard-v1`-taken. `GET
+/onboarding/progress` geeft nu de Engelse titel terug, met terugval op de opgeslagen Nederlandse
+titel. Geen migratie, de opgeslagen taken en de ops-tab blijven Nederlands.
+Commit `14ee3a4`. CI `37585542117` (success), Deploy `37585708357` (success).
 
-**Backend** (`app/api/onboarding.py`, nieuw, los van de bestaande ops-only `/ops/onboarding/*`):
-- `GET /onboarding/progress` — alleen de eigen organisatie (uit het token, nooit uit de aanvraag),
-  geeft `{"project": null}` zonder gekoppeld account/actief project, anders fasen met voortgang en
-  alleen de taken die `customer_visible=True` zijn — nooit een veld uit de interne `ops_accounts`-tabel
-  (contactnaam, e-mail, notities, voorgestelde tier, accountstatus).
-- `PATCH /onboarding/tasks/{id}` — alleen `status` (ongeldige waarde of extra veld → automatisch 422),
-  alleen voor taken die zichtbaar én van de klant (`owner` = customer/both) zijn, **404** (nooit 403)
-  voor alles daarbuiten. Elke echte wijziging krijgt een auditregel zonder notitietekst.
-- Commit `400601d`. CI `37520013737` (success), Deploy `37520227420` (success).
-- Backendtests: 373 → **384** (11 nieuw, eigen geïsoleerde testfixtures per test).
+**N2 — `POST /ai-policy`-overclaim.** Dit endpoint had zijn eigen, losse hardcoded "AI systems are
+continuously monitored." — dezelfde overclaim als het provisioningsjabloon had vóór een eerdere
+sessie. Beide plekken trekken nu uit één nieuwe, gedeelde constante.
+Commit `27d4322`. CI `37585845235` (success), Deploy `37586075176` (success).
 
-**Portaal** (`ai-governance-frontend`):
-- Nieuwe kaart `src/components/OnboardingProgressCard.tsx` op de Home-tab; rendert niets zonder actief
-  project. Optimistische checkbox-update met terugrollen + foutmelding bij een mislukte save.
-- `src/services/onboardingProgress.ts` (typed client) + een nieuwe generieke `apiPatch`-helper in
-  `src/lib/api.ts`.
-- Commit `5edf5ee`. CI `37520453084` (success), Deploy `37520542503` (success, `DEPLOY CHECK OK`).
-- README bijgewerkt, commit `5593b3b`. CI `37521528824`/Deploy beide succes.
-- Portaaltests: 122 → **128** (6 nieuw).
+**N3 — organisatie 3's tekst gecorrigeerd.** Nieuw, idempotent script
+`scripts/fix_monitoring_commitment.py --org <id> [--dry-run]`: corrigeert een `AIPolicy`-rij alleen
+als de tekst **exact** de oude overclaim is. Op productie gedraaid voor org 3 (dry-run eerst, toen
+echt): gecorrigeerd. **Organisatie 4 bewust ongewijzigd** (nog de oude tekst, zoals voorgeschreven).
+`/audit/verify` bevestigd `valid` voor org 3.
+Commit `b6411e9`. CI `37586188132` (success), Deploy `37586377937` (success).
 
-**Productiecheck** (server-side gemunte tokens voor een testaccount en een bestaande demo-klant, nooit
-geprint, bestanden na gebruik direct verwijderd):
-- Het echte onboardingproject van het testaccount gaf precies de verwachte 14 klant-zichtbare taken
-  terug, met de juiste 4 taken als "niet van jou" gemarkeerd.
-- Een organisatie zonder gekoppeld account gaf correct `{"project": null}`.
-- Een headless-browsercheck op de echte, live Home-pagina bevestigde: de kaart rendert met de juiste
-  fasen/taken, nul CSP-violations, nul gefaalde requests, en een scan over de volledige paginatekst
-  vond geen van de interne velden die nooit mogen lekken.
+**N4 — Valqerons eigen AI-register geladen in organisatie 1.** Nieuw, idempotent en insert-only
+script `scripts/seed_own_register.py --config scripts/data/eigen-register-valqeron.json
+[--dry-run]`. Op productie gedraaid (dry-run eerst, toen echt): organisatie 1 had 0 rijen zoals
+verwacht → 1 `AIPolicy`, 14 `AISystem`, 14 `AIRisk` aangemaakt (12 medium, 1 high, 1 low). Een
+herhaalde dry-run bewees idempotentie (alles overgeslagen). Organisaties 2/3/4 bevestigd
+ongewijzigd. `/audit/verify` bevestigd `valid` voor org 1.
+**Belangrijke bevinding tijdens het bouwen:** `create_audit_log()` committed de lopende transactie
+zelf — dit dwong een herontwerp af (eerst alle rijen bouwen en in één commit wegschrijven, pas
+daarna auditregels), nu gedocumenteerd in CLAUDE.md zodat een volgende sessie dit niet opnieuw moet
+ontdekken.
+Commit `aaca3f7`. CI `37586672416` (success), Deploy `37586863483` (success).
 
-**CLAUDE.md bijgewerkt** (secties 2, 5, 6, 7) met het volledige verhaal van Batch K en Batch L Deel A,
-na `git status`/`git diff` in beide repo's. Commit `30194b8`.
+**CLAUDE.md bijgewerkt (secties 2, 5, 6, 7) voor Batch N.** Commit `cdbd2e8`. CI `37587670567`
+(success), Deploy `37587868441` (success).
+
+**Testaantallen Batch N:** backend 395 → **414** (N1 +2, N2 +1, N3 +6, N4 +10).
 
 ---
 
-## Batch L, Deel B — niet gestart
+## Batch O — governance schrijfkant
 
-Geen enkele stopvoorwaarde uit de hand-off is geraakt (geen migratie nodig gebleken, geen
-classifier-blokkade, geen rode test, geen twee opeenvolgende mislukte Deploys). De keuze om hier te
-stoppen is een bewuste batchgrens bij het aflopen van het beschikbare contextbudget voor deze sessie —
-de hand-off staat dit zelf expliciet toe: "Is Deel A klaar maar Deel B blokkeert: lever Deel A volledig
-af en meld Deel B."
+Hand-off: `claude-code-handoff-batch-o-governance-schrijfkant.md`, gestart direct na Batch N (N was
+gezond: alle tests groen, alle acht CI/Deploy-runs groen).
 
-**Wat al wél bekeken is (Fase 0, alleen lezen) en meegegeven wordt aan de volgende sessie:**
-- Er bestaat nog geen enkel klant-leesbaar lijst-endpoint voor de governance-objecten (policy,
-  AI-systemen, risico's, incidenten, evidence) — alleen ops-only routes en een aggregaat-snapshot die
-  niet als lijstbron te gebruiken is.
-- `PUT /corrective-actions/{id}/status` bestaat al, is correct op de eigen organisatie geschaald, maar
-  geeft bij een ongeldige status een `400` (niet de `422` die een eerste lezing van de hand-off deed
-  vermoeden) en roept nog geen audit-log-functie aan — dat moet Deel B zelf toevoegen.
-- De tekstcorrectie uit de hand-off (één overclaim in een provisioning-sjabloontekst,
-  `app/core/provisioning_defaults.py`'s `monitoring_commitment`) is nog **niet** doorgevoerd — raakt
-  alleen toekomstige provisioning, geen bestaande rij.
+**Fase 0 (alleen lezen) — de bevinding die de rest van dit batch bepaalde:** `CorrectiveAction`
+heeft precies vier kolommen: `title`, `description`, `status`, `ai_risk_id`. Er is **geen**
+`owner`-kolom, **geen** `deadline`-kolom, en **geen** `ai_incident_id` (alleen een koppeling naar
+een risico, niet naar een incident). O2 vroeg letterlijk om een eigenaar, een deadline, en een
+koppeling aan "een incident of risico" — van die drie bestaat er dus precies één.
 
-Deze bevindingen staan ook als nieuwe risicorij in CLAUDE.md sectie 5, zodat ze niet verloren gaan.
+### O1 — incidenten: volledig klaar en op productie geverifieerd
+
+- Backend: `POST /ai-incidents`, `PATCH /ai-incidents/{id}` (bewust op het bestaande
+  `/ai-incidents`-pad, niet het letterlijke `/incidents` uit de hand-off, voor consistentie met de
+  al bestaande `GET`). `ai_system_id` blijft verplicht bij aanmaken (niet "optioneel" zoals de
+  hand-off's tekst suggereerde) — zonder gekoppeld systeem heeft een incident geen enkele manier om
+  aan een organisatie te hangen. Geen extra rolcontrole (spiegelt het bestaande
+  `PUT /corrective-actions/{id}/status`). Auditregels bevatten nooit titel-/beschrijvingstekst.
+  9 nieuwe tests. Commit `bc8aa33`. CI `37588788575` (success), Deploy `37588990853` (success).
+- Portaal: een "Register incident"-formulier + een statusselect per incident op de Governance-tab,
+  optimistisch met terugrollen bij een mislukte save. 6 nieuwe tests. Commit `4f86403`.
+  CI `37589117624` (success), Deploy `37589246970` (success).
+- **Productiecheck:** één echt, toegestaan wegwerp-incident aangemaakt op organisatie 1
+  ("TEST (7 okt), mag worden gesloten", gekoppeld aan een echt org-1-systeem) en meteen gesloten via
+  de nieuwe statuswissel — blijft bewust op productie staan met status "closed", zoals de hand-off
+  toestond. Organisatie 2 kreeg `404` op een poging het te wijzigen en zag een lege lijst.
+  `/audit/verify` bevestigd `valid` voor organisatie 1. Een headless-browsercheck bevestigde dat de
+  Governance-tab het testincident als "Closed" toont en dat het registratieformulier met alle
+  velden opent, zonder CSP-fouten.
+
+**Testaantallen O1:** backend 414 → **423** (+9); portaal 136 → **142** (+6).
+
+### O2/O3 — niet gebouwd, batch gestopt
+
+Reden: `CorrectiveAction` mist de kolommen die O2 nodig heeft (`owner`, `deadline`,
+`ai_incident_id`). Dit is precies de stopvoorwaarde die de hand-off zelf benoemt ("een migratie of
+nieuw veld nodig lijkt: stop en meld"). Geen migratie uitgevoerd (verboden door zowel de hand-off
+als de dagrun-opdracht) en geen workaround geprobeerd (bijvoorbeeld eigenaar/deadline in de vrije
+tekst proppen — dat zou het "verzin geen kolom"-principe in de geest schenden).
+
+O3 (risico's aanmaken/bijwerken) was zelf **niet** geblokkeerd — `AIRisk` heeft alle benodigde
+kolommen al. Toch bewust niet gebouwd, omdat de dagrun-opdracht de volgorde "O1, daarna O2, daarna
+O3" voorschrijft en de hand-off's stopvoorwaarde batch-breed is geformuleerd, niet per onderdeel.
+
+**Wat nodig is om verder te gaan:** een kleine, losse hand-off met een migratie die `owner`,
+`deadline` en `ai_incident_id` aan `CorrectiveAction` toevoegt (of een bewust besluit om zonder die
+velden verder te gaan), waarna O2 en O3 in een vervolgsessie gebouwd kunnen worden.
+
+**CLAUDE.md bijgewerkt (secties 2, 5, 6, 7) voor Batch O.** Commit `c8ee957`. CI `37608921767`
+(success), Deploy `37609091043` (success). Frontend README bijgewerkt: commit `6cc419a`.
 
 ---
 
@@ -114,16 +111,22 @@ Deze bevindingen staan ook als nieuwe risicorij in CLAUDE.md sectie 5, zodat ze 
 
 | Commit | Repo | Omschrijving | CI | Deploy |
 |---|---|---|---|---|
-| `6e5a49d` | ai-governance-os | K1: `--no-cache-dir` op elke server-side pip install | `37517040475` success | `37517281973` success |
-| `50b10c2` | ai-governance-os | CLAUDE.md: Batch K | `37518908709` success | `37519132969` success |
-| `400601d` | ai-governance-os | Batch L Deel A backend: `/onboarding/progress`, `/onboarding/tasks/{id}` | `37520013737` success | `37520227420` success |
-| `30194b8` | ai-governance-os | CLAUDE.md: Batch L Deel A + Deel B Fase-0-bevindingen | `37521837829` success | `37522112418` success |
-| `5edf5ee` | ai-governance-frontend | Batch L Deel A portaal: onboarding-progress-kaart op Home | `37520453084` success | `37520542503` success |
-| `5593b3b` | ai-governance-frontend | README: onboarding-progress-kaart documenteren | `37521528824` success | `37521606481` success |
+| `14ee3a4` | ai-governance-os | N1: Engelse taaktitels | `37585542117` success | `37585708357` success |
+| `27d4322` | ai-governance-os | N2: gedeelde monitoring-tekst-constante | `37585845235` success | `37586075176` success |
+| `b6411e9` | ai-governance-os | N3: fix-script voor org 3 | `37586188132` success | `37586377937` success |
+| `aaca3f7` | ai-governance-os | N4: eigen AI-register seed-script | `37586672416` success | `37586863483` success |
+| `cdbd2e8` | ai-governance-os | CLAUDE.md: Batch N | `37587670567` success | `37587868441` success |
+| `bc8aa33` | ai-governance-os | O1 backend: incidenten | `37588788575` success | `37588990853` success |
+| `4f86403` | ai-governance-frontend | O1 portaal: incidentenformulier | `37589117624` success | `37589246970` success |
+| `c8ee957` | ai-governance-os | CLAUDE.md: Batch O | `37608921767` success | `37609091043` success |
+| `6cc419a` | ai-governance-frontend | README: Batch O1 | `37609211431` success | `37609377960` success |
 
-**Testaantallen:** backend 373 → 384 (+11); portaal 122 → 128 (+6).
+**Testaantallen:** backend 395 → 414 (Batch N) → 423 (Batch O1). Portaal 136 → 142 (Batch O1).
 
-Geen migraties uitgevoerd. Geen nieuwe organisaties geprovisioned. Geen berichten of e-mail verstuurd.
-Geen echte klantactie uitgevoerd — alleen lezen + schrijven binnen het bestaande, al-aanwezige
-testaccount id 2 (status/notitie, via de bestaande API) en read-only productiechecks met server-side
-gemunte, nooit-opgeslagen tokens.
+Geen migraties uitgevoerd. Geen nieuwe organisaties geprovisioned. Geen berichten of e-mail
+verstuurd. Geen serverwijzigingen (geen apt, geen herstart, geen SSH-/nginx-config). De enige
+schrijfacties op productie waren: (1) het daadwerkelijk gevraagde werk van N3 (org 3's tekst
+gecorrigeerd) en N4 (org 1's eigen register geladen), en (2) de door de hand-off O1 expliciet
+toegestane wegwerp-aanroep (één testincident op org 1, aangemaakt en meteen gesloten, blijft bewust
+staan). Alle overige productiechecks waren alleen-lezen, met server-side gemunte tokens die nooit
+zijn geprint en na gebruik verwijderd.
