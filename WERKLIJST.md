@@ -18,7 +18,7 @@ Bijgehouden door Cowork (architect). Claude Code **leest** dit bestand en werkt 
 
 | # | Opdracht | Hand-off | Status | Voorwaarde |
 |---|---|---|---|---|
-| 1 | Batch O3: risico's aanmaken en bijwerken (geen migratie) | `claude-code-handoff-batch-o3-risicos.md` | OPEN | O1 klaar (is KLAAR) |
+| 1 | Batch O3: risico's aanmaken en bijwerken (geen migratie) | `claude-code-handoff-batch-o3-risicos.md` | KLAAR | O1 klaar (is KLAAR) |
 | 2 | Batch H (A3): fictieve demotenant "Atlas Demo B.V.", alle 10 workflows, doorlooptijdmeting | `claude-code-handoff-batch-h-demotenant-meting.md` | OPEN | Regel 1 KLAAR |
 | 3 | Batch O2: corrigerende maatregelen aanmaken, **met migratie** (owner, due_date, ai_incident_id) | `claude-code-handoff-batch-o2-corrigerende-maatregelen.md` | OPEN | Regel 2 KLAAR. Dennis' akkoord op de migratie is gegeven (7 okt 2026) |
 | 4 | Batch O4 (A2): evidence aanmaken in de Governance-tab (metadata, geen bestandsupload) | nog te schrijven door Cowork | WACHT OP COWORK | Regel 3 KLAAR |
