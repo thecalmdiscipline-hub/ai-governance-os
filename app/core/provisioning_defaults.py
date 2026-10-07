@@ -20,7 +20,11 @@ def policy_texts(organization_name: str) -> Dict[str, str]:
         "purpose": f"{STANDARD_NOTICE} {organization_name} uses AI responsibly and only for purposes it has defined and documented.",
         "principles": f"{STANDARD_NOTICE} Transparency, human oversight, risk-based control and data minimisation.",
         "risk_commitment": f"{STANDARD_NOTICE} All AI systems undergo a documented risk assessment before use and are reviewed regularly.",
-        "monitoring_commitment": f"{STANDARD_NOTICE} AI systems are monitored continuously; incidents are recorded and followed up.",
+        # Corrected Batch L Deel B (2026-10-07): "monitored continuously" was an overclaim the
+        # product doesn't make good on (there is no continuous-monitoring feature). Template-only
+        # — existing AIPolicy rows keep their original text; see CLAUDE.md §6 for which org ids
+        # still have the old wording.
+        "monitoring_commitment": f"{STANDARD_NOTICE} AI systems are reviewed on a regular basis by the organisation; incidents are recorded and followed up.",
     }
 
 
