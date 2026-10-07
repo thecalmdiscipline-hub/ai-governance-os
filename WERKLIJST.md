@@ -21,7 +21,7 @@ Bijgehouden door Cowork (architect). Claude Code **leest** dit bestand en werkt 
 | 1 | Batch O3: risico's aanmaken en bijwerken (geen migratie) | `claude-code-handoff-batch-o3-risicos.md` | KLAAR | O1 klaar (is KLAAR) |
 | 2 | Batch H (A3): fictieve demotenant "Atlas Demo B.V.", alle 10 workflows, doorlooptijdmeting | `claude-code-handoff-batch-h-demotenant-meting.md` | KLAAR | H1 klaar. Dennis heeft het wachtwoord van `atlas_demo_admin` gewijzigd (7 okt 2026); hervat bij H2 volgens het HERVAT-BLOK, na afronding van een lopende O2-stap |
 | 3 | Batch O2: corrigerende maatregelen aanmaken, **met migratie** (owner, due_date, ai_incident_id) | `claude-code-handoff-batch-o2-corrigerende-maatregelen.md` | KLAAR | Regel 1 KLAAR. Dennis' akkoord op de migratie is gegeven (7 okt 2026) |
-| 4 | Batch O4 (A2): evidence aanmaken in de Governance-tab (metadata, geen bestandsupload) | `claude-code-handoff-batch-o4-evidence.md` | OPEN | Regel 3 KLAAR (is KLAAR) |
+| 4 | Batch O4 (A2): evidence aanmaken in de Governance-tab (metadata, geen bestandsupload) | `claude-code-handoff-batch-o4-evidence.md` | KLAAR | Regel 3 KLAAR (is KLAAR) |
 | 5 | Batch M (A4): handout-generator NL/EN | nog te schrijven door Cowork | WACHT OP COWORK | Regel 2 KLAAR; Dennis' invulpunten (contact, HR-module, goudtint) |
 | 6 | Batch Q (A5): maandrapportage | nog te schrijven door Cowork | WACHT OP COWORK | Regel 5 KLAAR |
 | 7 | Batch P: back-up, herstelproef, schijf- en uptimebewaking | `claude-code-handoff-batch-p-backup-herstelproef-bewaking.md` | WACHT OP DENNIS | Dennis levert de vier punten bovenaan de hand-off |
