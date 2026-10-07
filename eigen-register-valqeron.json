@@ -1,0 +1,236 @@
+{
+  "organization_id": 1,
+  "status": "approved by founder 7 Oct 2026 (content), ready to load; HR workflow on hold",
+  "policy": {
+    "purpose": "Valqeron uses AI to provide a governed AI control layer and ready-made workflows to business customers, and to support its own software development. It uses AI only for purposes defined and documented in this register.",
+    "principles": "Output of AI is decision support and is reviewed by a person before it is used; customers are told where AI is used; personal data is minimised and anonymised before it is sent to a language model; tenants are isolated; actions are recorded in an auditable log.",
+    "risk_commitment": "Every AI system and workflow is recorded in this register with at least one documented risk and mitigation. Risks are reviewed at least once a year and whenever a workflow changes materially.",
+    "monitoring_commitment": "Application errors are reported to an error-monitoring service without personal data. Incidents are recorded and followed up by the founder. Output quality is reviewed on a regular basis by a person; there is no automated continuous monitoring of model output."
+  },
+  "ai_systems": [
+    {
+      "key": "sales_qualification_ai",
+      "kind": "workflow",
+      "name": "Sales Lead Qualification",
+      "description": "Lead intake, scoring 0-100 and ICP matching.",
+      "purpose": "Support Valqeron's own sales intake and qualification.",
+      "risks": [
+        {
+          "title": "Lead score or ICP match may be wrong",
+          "description": "A score may over- or under-rate a lead and may reflect the configured ICP text rather than the real prospect.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: A salesperson reviews the score before contacting a lead; scores are not used for automated decisions.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "document_intelligence",
+      "kind": "workflow",
+      "name": "Document Knowledge",
+      "description": "Question answering on uploaded documents.",
+      "purpose": "Let staff query Valqeron's own documents.",
+      "risks": [
+        {
+          "title": "Answers may be inaccurate or point to the wrong document",
+          "description": "The model may misread a document or combine content from different documents.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: Answers are checked against the document snippets shown with the answer.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "invoice_processing_ai",
+      "kind": "workflow",
+      "name": "Invoice Processing",
+      "description": "Invoice extraction and validation.",
+      "purpose": "Extract fields from invoices Valqeron receives.",
+      "risks": [
+        {
+          "title": "Extracted invoice fields may be wrong",
+          "description": "Amounts, dates or counterparties may be misread.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: A person checks extracted amounts and counterparties before booking or payment.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "compliance_monitor",
+      "kind": "workflow",
+      "name": "Compliance Monitoring",
+      "description": "Policy overview and compliance tracking.",
+      "purpose": "Review Valqeron's own policies against the register.",
+      "risks": [
+        {
+          "title": "Compliance findings may be incomplete",
+          "description": "The output may miss a requirement or misjudge a policy.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: Treat the output as decision support; a responsible person confirms every finding.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "customer_support_ai",
+      "kind": "workflow",
+      "name": "Customer Support",
+      "description": "Support triage and suggested replies.",
+      "purpose": "Triage and draft replies for Valqeron's own support requests.",
+      "risks": [
+        {
+          "title": "Triage or suggested replies may be wrong",
+          "description": "A reply may be inaccurate or tone-deaf, or a request may be mis-prioritised.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: A person reviews suggested replies before they reach a customer.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "hr_recruitment_ai",
+      "kind": "workflow",
+      "name": "HR Recruitment",
+      "description": "Candidate screening and summaries. ON HOLD: this workflow is not used by Valqeron until a legal review has been completed.",
+      "purpose": "On hold: not in use until a legal review (GDPR and EU AI Act) has been completed.",
+      "risks": [
+        {
+          "title": "Candidate screening may be inaccurate or discriminatory",
+          "description": "Recruitment and candidate assessment is a high-risk area under the EU AI Act (employment). A summary or score can be wrong or reflect bias. Legal classification to be confirmed.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: No automated rejection; a person makes every decision and checks the summary against the source; candidate data is anonymised before model use. Classification under the EU AI Act to be confirmed with legal advice.",
+          "level": "high"
+        }
+      ],
+      "use_status": "on_hold"
+    },
+    {
+      "key": "marketing_automation",
+      "kind": "workflow",
+      "name": "Marketing Automation",
+      "description": "Campaign strategy suggestions.",
+      "purpose": "Draft campaign ideas for Valqeron's own marketing.",
+      "risks": [
+        {
+          "title": "Campaign content may be inaccurate or off-brand",
+          "description": "The model may state unverified claims about products or compliance.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: A person reviews all content before publication, in particular any claim about the product or about compliance.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "meeting_agenda_assistant",
+      "kind": "workflow",
+      "name": "Meeting Agenda Assistant",
+      "description": "Meeting preparation and agendas.",
+      "purpose": "Prepare agendas for Valqeron's own meetings.",
+      "risks": [
+        {
+          "title": "Agenda items may misstate context",
+          "description": "The agenda may misrepresent a topic or a participant's position.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: The organiser reviews the agenda before it is sent.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "quote_contract_generator",
+      "kind": "workflow",
+      "name": "Quote & Contract Generator",
+      "description": "Quote and contract drafts in Dutch or English.",
+      "purpose": "Draft quotes and contract terms for Valqeron's own sales.",
+      "risks": [
+        {
+          "title": "Quote or contract text may contain wrong terms or unintended commitments",
+          "description": "The draft may state prices, terms or obligations that are not intended.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: Drafts are for review only; a person, and legal counsel where needed, approves before anything is sent. Anonymisation placeholders are restored only within the same request.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "business_intelligence",
+      "kind": "workflow",
+      "name": "Business Intelligence",
+      "description": "Executive insights and data lineage.",
+      "purpose": "Summarise Valqeron's own business data for the founder.",
+      "risks": [
+        {
+          "title": "Insights may be wrong or overstated",
+          "description": "The model may infer trends from thin data or misstate numbers.",
+          "mitigation": "Product: personal data is anonymised before the model call (fail-closed: no call if the anonymisation layer is unavailable) and every run is recorded in a per-tenant, tamper-evident audit log. Process: Insights are decision support; the underlying data is checked by a person before decisions are taken.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "llm_provider_openai",
+      "kind": "platform",
+      "name": "Language model provider (OpenAI, gpt-4o-mini)",
+      "description": "Third-party language model used by all workflows.",
+      "purpose": "Generate the text of every workflow.",
+      "risks": [
+        {
+          "title": "Data goes to a third-party model provider",
+          "description": "Text sent to the provider leaves Valqeron's infrastructure; provider terms, retention and location are outside Valqeron's control.",
+          "mitigation": "Product: personal data is anonymised before the call. Open action: review the provider's data processing terms, retention and no-training settings and record the outcome (to be confirmed by the founder).",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "pii_layer",
+      "kind": "platform",
+      "name": "Anonymisation layer (Presidio and spaCy)",
+      "description": "Detects and replaces personal data before the model call; restores placeholders in the output of the same request.",
+      "purpose": "Keep personal data out of model calls.",
+      "risks": [
+        {
+          "title": "Anonymisation may miss personal data",
+          "description": "Detection is not perfect; names or identifiers may pass through unreplaced.",
+          "mitigation": "Product: fail-closed (no model call when the layer is unavailable); restoration uses only the mapping of the same request; unresolved placeholders are shown as [omitted]; restored text and mapping are not logged. Open action: build a test set to measure detection quality.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "dev_assistants",
+      "kind": "platform",
+      "name": "AI development assistants (Claude, Claude Code)",
+      "description": "AI used to design, write and review Valqeron's own software.",
+      "purpose": "Speed up development of the platform.",
+      "risks": [
+        {
+          "title": "Secrets or customer data exposed to AI tooling; AI-written code may contain defects",
+          "description": "Credentials or customer data could be pasted into a chat; generated code may contain bugs or security flaws.",
+          "mitigation": "Process: secrets are never put in chats (keys are placed on the server by the founder); AI sessions work from written hand-offs with stop conditions; changes go through CI tests and an automatic rollback on a failed deploy; production checks are read-only unless agreed.",
+          "level": "medium"
+        }
+      ],
+      "use_status": "in_use"
+    },
+    {
+      "key": "outbound_reply_classification",
+      "kind": "platform",
+      "name": "Outbound reply classification (planned)",
+      "description": "Planned AI classification of replies to outbound campaigns. Only the data model exists; not in production use.",
+      "purpose": "Sort replies to outreach.",
+      "risks": [
+        {
+          "title": "Replies may be misclassified and people who opted out may be contacted",
+          "description": "A wrong classification could lead to contact with someone who declined.",
+          "mitigation": "Not in use. Before use: a suppression-list check is required before any sending, and the system is reviewed and recorded here.",
+          "level": "low"
+        }
+      ],
+      "use_status": "planned"
+    }
+  ]
+}
