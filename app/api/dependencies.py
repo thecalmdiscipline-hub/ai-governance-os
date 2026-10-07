@@ -3,6 +3,7 @@ from typing import Callable, Optional
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_hq_organization_id
@@ -182,10 +183,36 @@ def get_org_scoped_incident(incident_id: int, current_user: User, db: Session):
 
 
 def get_org_scoped_action(action_id: int, current_user: User, db: Session):
-    action = db.query(CorrectiveAction).join(AIRisk).join(AISystem).filter(
+    # Batch O2: a corrective action now links to a risk OR an incident (or both) — an inner join
+    # through AIRisk alone would silently exclude an incident-only action. Mirrors how /evidence
+    # already scopes via either AISystem.id or AIRisk.id.
+    risk_ids = (
+        db.query(AIRisk.id)
+        .join(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AIRisk.is_deleted == False)
+    )
+    incident_ids = (
+        db.query(AIIncident.id)
+        .join(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AIIncident.is_deleted == False)
+    )
+    action = db.query(CorrectiveAction).filter(
         CorrectiveAction.id == action_id,
-        AISystem.organization_id == current_user.organization_id,
+        or_(
+            CorrectiveAction.ai_risk_id.in_(risk_ids),
+            CorrectiveAction.ai_incident_id.in_(incident_ids),
+        ),
     ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
     return action
+
+
+def corrective_action_organization_id(action: CorrectiveAction) -> Optional[int]:
+    """The action's own tenant, via whichever of ai_risk_id/ai_incident_id it has (ORM
+    relationships, so this works on an object just loaded in the current session)."""
+    if action.ai_risk is not None:
+        return action.ai_risk.ai_system.organization_id
+    if action.ai_incident is not None:
+        return action.ai_incident.ai_system.organization_id
+    return None

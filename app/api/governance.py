@@ -17,6 +17,7 @@ from app.api.dependencies import (
     get_org_scoped_risk,
     get_org_scoped_incident,
     get_org_scoped_action,
+    corrective_action_organization_id,
 )
 from app.core.audit import create_audit_log
 from app.core.deployment_service import check_deployment_readiness
@@ -722,13 +723,56 @@ def create_corrective_action(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_org_scoped_risk(action.ai_risk_id, current_user, db)
+    # Batch O2: ai_risk_id and/or ai_incident_id, each validated (and tenant-scoped) only if given
+    # — the schema's own validator already requires at least one of them to be present.
+    if action.ai_risk_id is not None:
+        get_org_scoped_risk(action.ai_risk_id, current_user, db)
+    if action.ai_incident_id is not None:
+        get_org_scoped_incident(action.ai_incident_id, current_user, db)
 
-    db_action = CorrectiveAction(**action.dict())
+    db_action = CorrectiveAction(**action.model_dump())  # status defaults to "open" on the model
     db.add(db_action)
     db.commit()
     db.refresh(db_action)
+
+    create_audit_log(
+        db=db,
+        organization_id=corrective_action_organization_id(db_action),
+        entity_type="corrective_action",
+        entity_id=db_action.id,
+        action="corrective_action_created",
+        details="CorrectiveAction created",
+        performed_by=current_user.username,
+    )
+
     return db_action
+
+
+@router.get("/corrective-actions", response_model=List[CorrectiveActionResponse])
+def list_corrective_actions(
+    ai_incident_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    risk_ids = (
+        db.query(AIRisk.id)
+        .join(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AIRisk.is_deleted == False)
+    )
+    incident_ids = (
+        db.query(AIIncident.id)
+        .join(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AIIncident.is_deleted == False)
+    )
+    query = db.query(CorrectiveAction).filter(
+        or_(
+            CorrectiveAction.ai_risk_id.in_(risk_ids),
+            CorrectiveAction.ai_incident_id.in_(incident_ids),
+        )
+    )
+    if ai_incident_id is not None:
+        query = query.filter(CorrectiveAction.ai_incident_id == ai_incident_id)
+    return query.order_by(CorrectiveAction.id.desc()).all()
 
 
 @router.put("/corrective-actions/{action_id}/status")
@@ -754,7 +798,7 @@ def update_corrective_action_status(
     # all. details carries only the old/new status, never update.reason (free text).
     create_audit_log(
         db=db,
-        organization_id=action.ai_risk.ai_system.organization_id,
+        organization_id=corrective_action_organization_id(action),
         entity_type="corrective_action",
         entity_id=action.id,
         action="corrective_action_status_changed",
@@ -922,25 +966,6 @@ def list_ai_incidents(
             AIIncident.is_deleted == False,
         )
         .order_by(AIIncident.id.desc())
-        .all()
-    )
-
-
-@router.get("/corrective-actions", response_model=List[CorrectiveActionResponse])
-def list_corrective_actions(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return (
-        db.query(CorrectiveAction)
-        .join(AIRisk, CorrectiveAction.ai_risk_id == AIRisk.id)
-        .join(AISystem, AIRisk.ai_system_id == AISystem.id)
-        .filter(
-            AISystem.organization_id == current_user.organization_id,
-            AISystem.is_deleted == False,
-            AIRisk.is_deleted == False,
-        )
-        .order_by(CorrectiveAction.id.desc())
         .all()
     )
 
