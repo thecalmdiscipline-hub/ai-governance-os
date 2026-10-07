@@ -19,7 +19,7 @@ from app.models.onboarding_project import OnboardingProject
 from app.models.onboarding_task import OnboardingTask
 from app.models.ops_account import OpsAccount
 from app.models.user import User
-from app.services.onboarding import apply_task_status
+from app.services.onboarding import CUSTOMER_TASK_TITLES_EN, apply_task_status
 
 router = APIRouter(tags=["Onboarding"])
 
@@ -82,7 +82,9 @@ def onboarding_progress(current_user: User = Depends(get_current_user), db: Sess
             {
                 "id": t.id,
                 "phase": t.phase,
-                "title": t.title,
+                # English title (Batch N1, 2026-10-07): falls back to the stored (Dutch) title
+                # when (phase, position) isn't in the translation table — never a blank title.
+                "title": CUSTOMER_TASK_TITLES_EN.get((t.phase, t.position), t.title),
                 "status": t.status,
                 "owner": OWNER_LABELS.get(t.owner, t.owner),
                 # Corrected 2026-10-07: only owner="customer" is customer-editable. A "both" task

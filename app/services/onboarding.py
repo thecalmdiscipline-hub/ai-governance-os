@@ -72,6 +72,29 @@ KICKOFF_PHASE = 3
 GOLIVE_PHASE = 7
 FINAL_PHASE = 8
 
+# English titles for the 14 customer_visible standard-v1 tasks (Batch N1, 2026-10-07). Keyed by
+# (phase, position), not by the stored (Dutch) title, so a later edit to the stored text doesn't
+# silently break the lookup. Read-only translation at response time — app/api/onboarding.py's
+# GET /onboarding/progress falls back to the stored title when a key is missing (e.g. a future
+# customer_visible task added here without an English translation yet); the ops-tab and the
+# stored OnboardingTask rows themselves stay Dutch, unchanged. No migration, no rewritten rows.
+CUSTOMER_TASK_TITLES_EN: Dict[Tuple[int, int], str] = {
+    (2, 2): "Proposal approved",
+    (2, 3): "DPA signed",
+    (2, 4): "Company details received: company name, country, sector, first administrator, roles of other users",
+    (3, 1): "Kickoff call scheduled",
+    (3, 2): "Goals and scope confirmed per workflow",
+    (3, 3): "Technical contact and roles assigned: admin, auditor, operator",
+    (3, 4): "Go-live date agreed",
+    (5, 1): "First documents uploaded",
+    (6, 1): "Training session scheduled",
+    (6, 2): "Training delivered with the Client Portal Guide",
+    (6, 3): "Roles and reviewing results explained",
+    (7, 2): "Result reviewed together with you",
+    (8, 1): "First-week check-in",
+    (8, 2): "First monthly usage report sent",
+}
+
 
 def seed_standard_v1(db: Session, dry_run: bool = False) -> Dict[str, object]:
     """Idempotent, insert-only: creates the 'standard-v1' template + its tasks if they don't exist

@@ -13,6 +13,7 @@ from app.models.onboarding_task import OnboardingTask
 from app.models.organization import Organization
 from app.models.ops_account import OpsAccount
 from app.models.user import User
+from app.services.onboarding import CUSTOMER_TASK_TITLES_EN, STANDARD_V1_TASKS
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -108,16 +109,25 @@ def test_progress_shows_only_customer_visible_tasks_no_internal_fields():
     assert body["project"]["id"] == project_id
     assert body["project"]["status"] == "active"
 
+    # Titles come back in English (Batch N1, 2026-10-07: CUSTOMER_TASK_TITLES_EN, keyed by
+    # (phase, position) — these 4 fixture rows mirror real standard-v1 (phase, position) pairs, so
+    # the translation table applies to them too, not just the stored Dutch text.
     titles = {t["title"] for t in body["tasks"]}
-    assert titles == {"Voorstel akkoord", "DPA getekend", "Technisch contactpersoon toewijzen", "Training gegeven"}  # the 2 non-customer_visible tasks are excluded
+    assert titles == {
+        "Proposal approved",
+        "DPA signed",
+        "Technical contact and roles assigned: admin, auditor, operator",
+        "Training delivered with the Client Portal Guide",
+    }  # the 2 non-customer_visible tasks are excluded
+    assert not any("Voorstel" in t or "getekend" in t or "toewijzen" in t or "gegeven" in t for t in titles)  # no Dutch leaks through
 
     # editable reflects owner, independent of customer_visible. Corrected 2026-10-07: only
     # owner="customer" is editable — "both" is visible but read-only (Valqeron also has a hand in it).
     by_title = {t["title"]: t for t in body["tasks"]}
-    assert by_title["Voorstel akkoord"]["editable"] is True  # owner=customer
-    assert by_title["DPA getekend"]["editable"] is False  # owner=both — no longer editable
-    assert by_title["Technisch contactpersoon toewijzen"]["editable"] is True  # owner=customer
-    assert by_title["Training gegeven"]["editable"] is False  # owner=valqeron, visible but read-only
+    assert by_title["Proposal approved"]["editable"] is True  # owner=customer
+    assert by_title["DPA signed"]["editable"] is False  # owner=both — no longer editable
+    assert by_title["Technical contact and roles assigned: admin, auditor, operator"]["editable"] is True  # owner=customer
+    assert by_title["Training delivered with the Client Portal Guide"]["editable"] is False  # owner=valqeron, visible but read-only
 
     # Phase 2 has 2 of its (customer-visible) tasks counted, 1 done
     phase_2 = next(p for p in body["phases"] if p["phase"] == 2)
@@ -262,3 +272,36 @@ def test_audit_chain_stays_valid_after_customer_patch():
     res = client.get("/audit/verify", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert res.json()["status"] == "valid"
+
+
+def test_every_customer_visible_standard_v1_task_has_an_english_title():
+    """Batch N1 (2026-10-07): guards against a future customer_visible task being added to
+    STANDARD_V1_TASKS without a matching entry in CUSTOMER_TASK_TITLES_EN — this test fails the
+    moment that happens, rather than silently showing a Dutch title to a customer."""
+    missing = [
+        (phase, position, title)
+        for phase, position, title, _owner, customer_visible in STANDARD_V1_TASKS
+        if customer_visible and (phase, position) not in CUSTOMER_TASK_TITLES_EN
+    ]
+    assert missing == []
+    # Exactly the 14 known customer-visible tasks, no more, no fewer.
+    visible_count = sum(1 for *_, customer_visible in STANDARD_V1_TASKS if customer_visible)
+    assert visible_count == 14
+    assert len(CUSTOMER_TASK_TITLES_EN) == 14
+
+
+def test_onboarding_progress_falls_back_to_stored_title_for_an_unmapped_task(monkeypatch):
+    """If (phase, position) isn't in the translation table, the API must still return something —
+    the stored title — never an empty/missing title."""
+    import app.api.onboarding as onboarding_api
+
+    monkeypatch.setattr(onboarding_api, "CUSTOMER_TASK_TITLES_EN", {})
+
+    org_id, _, username = _new_org_with_user()
+    token = _token(username, org_id)
+    _make_account_with_project(org_id=org_id)
+
+    res = client.get("/onboarding/progress", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    titles = {t["title"] for t in res.json()["tasks"]}
+    assert titles == {"Voorstel akkoord", "DPA getekend", "Technisch contactpersoon toewijzen", "Training gegeven"}
