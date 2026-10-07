@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_hq_organization_id
+from app.core.rate_limiter import rate_limit_ops
 from app.db.session import SessionLocal
 from app.core.security import SECRET_KEY, ALGORITHM
 from app.models.user import User
@@ -111,6 +112,9 @@ def require_ops_access(current_user: User = Depends(get_current_user)) -> User:
             status_code=403,
             detail="Operations access requires a super-admin of the HQ organization with two-step verification",
         )
+    # Batch R: rate-limited only once authorization passes, so an unauthorized caller never
+    # spends a slot that belongs to a legitimate super-admin.
+    rate_limit_ops(current_user)
     return current_user
 
 

@@ -6,10 +6,21 @@ from collections import defaultdict
 
 from fastapi import HTTPException, Request
 
+from app.models.user import User
+
 logger = logging.getLogger(__name__)
 
-_WINDOW_SECONDS = 60
-_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 60
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_MESSAGE = "Too many login attempts. Try again later."
+
+# Batch R (2026-10-07): /ops/* has no rate limiting at all (a deliberate gap noted in CLAUDE.md —
+# every existing /ops/* route only ever used rate_limit_login on /login and /login/mfa). 60/min
+# per super-admin is generous enough that normal manual use, and the portal's 10s /ops/whoami
+# poll (~6/min), stay nowhere near it; it only catches a runaway client or script.
+_OPS_WINDOW_SECONDS = 60
+_OPS_MAX_ATTEMPTS = 60
+_OPS_MESSAGE = "Too many requests. Try again later."
 
 # ---------------------------------------------------------------------------
 # In-memory fallback (single-worker only)
@@ -18,35 +29,35 @@ _MAX_ATTEMPTS = 5
 _memory_attempts: dict = defaultdict(list)
 
 
-def _check_memory(ip: str) -> None:
+def _check_memory(key: str, window: int, max_attempts: int, message: str) -> None:
     now = time.time()
-    _memory_attempts[ip] = [t for t in _memory_attempts[ip] if now - t < _WINDOW_SECONDS]
-    if len(_memory_attempts[ip]) >= _MAX_ATTEMPTS:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
-    _memory_attempts[ip].append(now)
+    _memory_attempts[key] = [t for t in _memory_attempts[key] if now - t < window]
+    if len(_memory_attempts[key]) >= max_attempts:
+        raise HTTPException(status_code=429, detail=message)
+    _memory_attempts[key].append(now)
 
 
 # ---------------------------------------------------------------------------
 # Redis sliding-window check
 # ---------------------------------------------------------------------------
 
-def _check_redis(client, ip: str) -> None:
+def _check_redis(client, key: str, window: int, max_attempts: int, message: str) -> None:
     """Sliding window via sorted set. Atomic via pipeline."""
     now = time.time()
-    key = f"rl:login:{ip}"
+    redis_key = f"rl:{key}"
     # Unique member prevents collisions when requests arrive in the same millisecond
     member = f"{now:.6f}:{os.urandom(4).hex()}"
 
     pipe = client.pipeline()
-    pipe.zremrangebyscore(key, 0, now - _WINDOW_SECONDS)  # drop expired entries
-    pipe.zcard(key)                                        # count before this attempt
-    pipe.zadd(key, {member: now})                         # record this attempt
-    pipe.expire(key, _WINDOW_SECONDS)
+    pipe.zremrangebyscore(redis_key, 0, now - window)  # drop expired entries
+    pipe.zcard(redis_key)                               # count before this attempt
+    pipe.zadd(redis_key, {member: now})                # record this attempt
+    pipe.expire(redis_key, window)
     results = pipe.execute()
 
     count_before = results[1]
-    if count_before >= _MAX_ATTEMPTS:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+    if count_before >= max_attempts:
+        raise HTTPException(status_code=429, detail=message)
 
 
 # ---------------------------------------------------------------------------
@@ -85,23 +96,21 @@ def _init_redis():
 _init_redis()
 
 
-# ---------------------------------------------------------------------------
-# Public dependency
-# ---------------------------------------------------------------------------
-
-def rate_limit_login(request: Request) -> None:
-    if (
+def _in_test_mode() -> bool:
+    return (
         os.getenv("TESTING") == "1"
         or "PYTEST_CURRENT_TEST" in os.environ
         or "pytest" in sys.modules
-    ):
-        return
+    )
 
-    ip = request.client.host if request.client else "unknown"
+
+def _check(key: str, window: int, max_attempts: int, message: str) -> None:
+    if _in_test_mode():
+        return
 
     if _redis_client is not None:
         try:
-            _check_redis(_redis_client, ip)
+            _check_redis(_redis_client, key, window, max_attempts, message)
             return
         except HTTPException:
             raise
@@ -111,4 +120,20 @@ def rate_limit_login(request: Request) -> None:
                 exc,
             )
 
-    _check_memory(ip)
+    _check_memory(key, window, max_attempts, message)
+
+
+# ---------------------------------------------------------------------------
+# Public dependencies
+# ---------------------------------------------------------------------------
+
+def rate_limit_login(request: Request) -> None:
+    ip = request.client.host if request.client else "unknown"
+    _check(f"login:{ip}", _LOGIN_WINDOW_SECONDS, _LOGIN_MAX_ATTEMPTS, _LOGIN_MESSAGE)
+
+
+def rate_limit_ops(current_user: User) -> None:
+    """Keyed by the authenticated super-admin's user id, not IP — a shared office IP must not
+    throttle one admin because of another's traffic. Call only after require_ops_access's own
+    authorization check passes, so an unauthorized caller never spends a slot."""
+    _check(f"ops:{current_user.id}", _OPS_WINDOW_SECONDS, _OPS_MAX_ATTEMPTS, _OPS_MESSAGE)
