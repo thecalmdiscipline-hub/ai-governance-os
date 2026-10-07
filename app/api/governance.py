@@ -34,7 +34,7 @@ from app.models import (
 from app.models.user import User
 from app.schemas.ai_incident import AIIncidentCreate, AIIncidentResponse, AIIncidentUpdate
 from app.schemas.ai_policy import AIPolicyCreate, AIPolicyResponse
-from app.schemas.ai_risk import AIRiskCreate, AIRiskResponse
+from app.schemas.ai_risk import AIRiskCreate, AIRiskResponse, AIRiskUpdate
 from app.schemas.ai_system import AISystemCreate, AISystemResponse, AISystemUpdate
 from app.schemas.corrective_action import (
     CorrectiveActionCreate,
@@ -556,6 +556,61 @@ def create_ai_risk(
     db.commit()
     db.refresh(db_risk)
     return db_risk
+
+
+@router.patch("/ai-risks/{risk_id}", response_model=AIRiskResponse)
+def update_ai_risk(
+    risk_id: int,
+    update: AIRiskUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    risk = get_org_scoped_risk(risk_id, current_user, db)
+
+    # Lowering a high risk's level is the same policy as deleting one (see delete_ai_risk below):
+    # only a super-admin may do it. Raising a level, or editing title/description/mitigation on a
+    # high risk without changing its level, is unaffected.
+    if (
+        risk.risk_level == "high"
+        and update.risk_level is not None
+        and update.risk_level != "high"
+        and not has_super_admin_powers(current_user)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="High-risk records are immutable. Super-admin required.",
+        )
+
+    changed_fields = []
+    if update.title is not None:
+        risk.title = update.title
+        changed_fields.append("title")
+    if update.description is not None:
+        risk.description = update.description
+        changed_fields.append("description")
+    if update.mitigation is not None:
+        risk.mitigation = update.mitigation
+        changed_fields.append("mitigation")
+    if update.risk_level is not None:
+        old_level = risk.risk_level
+        risk.risk_level = update.risk_level
+        changed_fields.append(f"risk_level:{old_level}->{update.risk_level}")
+
+    db.commit()
+
+    # Audit details never carry title/description/mitigation text — only which fields changed
+    # (by name) and, for a level change specifically, the old/new level values.
+    create_audit_log(
+        db=db,
+        organization_id=risk.ai_system.organization_id,
+        entity_type="ai_risk",
+        entity_id=risk.id,
+        action="risk_updated",
+        details=", ".join(changed_fields) if changed_fields else "no fields changed",
+        performed_by=current_user.username,
+    )
+
+    return risk
 
 
 @router.delete("/ai-risks/{risk_id}")
