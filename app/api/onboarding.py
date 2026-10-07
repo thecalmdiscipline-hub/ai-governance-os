@@ -85,7 +85,10 @@ def onboarding_progress(current_user: User = Depends(get_current_user), db: Sess
                 "title": t.title,
                 "status": t.status,
                 "owner": OWNER_LABELS.get(t.owner, t.owner),
-                "editable": t.owner in ("customer", "both"),
+                # Corrected 2026-10-07: only owner="customer" is customer-editable. A "both" task
+                # (owner shared with Valqeron) is shown but read-only — Valqeron also has a hand in
+                # it, so a customer toggling it alone would be misleading.
+                "editable": t.owner == "customer",
             }
             for t in tasks
         ],
@@ -112,7 +115,7 @@ def update_onboarding_task(
             OnboardingTask.id == task_id,
             OpsAccount.organization_id == current_user.organization_id,
             OnboardingTask.customer_visible.is_(True),
-            OnboardingTask.owner.in_(("customer", "both")),
+            OnboardingTask.owner == "customer",  # corrected 2026-10-07: "both" is no longer writable
         )
         .first()
     )

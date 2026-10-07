@@ -62,7 +62,8 @@ def _make_account_with_project(org_id=None, with_project=True):
             # (phase, position, title, owner, customer_visible, status)
             (1, 1, "Lead vastleggen", "valqeron", False, "done"),
             (2, 2, "Voorstel akkoord", "customer", True, "done"),
-            (2, 3, "DPA getekend", "both", True, "todo"),
+            (2, 3, "DPA getekend", "both", True, "todo"),  # visible, NOT editable (owner=both, corrected 2026-10-07)
+            (3, 3, "Technisch contactpersoon toewijzen", "customer", True, "todo"),  # editable; used for PATCH-success tests
             (4, 1, "Organisatie aanmaken", "valqeron", False, "done"),
             (6, 2, "Training gegeven", "valqeron", True, "todo"),  # customer_visible but NOT editable by the customer
         ]
@@ -108,12 +109,14 @@ def test_progress_shows_only_customer_visible_tasks_no_internal_fields():
     assert body["project"]["status"] == "active"
 
     titles = {t["title"] for t in body["tasks"]}
-    assert titles == {"Voorstel akkoord", "DPA getekend", "Training gegeven"}  # the 2 non-customer_visible tasks are excluded
+    assert titles == {"Voorstel akkoord", "DPA getekend", "Technisch contactpersoon toewijzen", "Training gegeven"}  # the 2 non-customer_visible tasks are excluded
 
-    # editable reflects owner, independent of customer_visible
+    # editable reflects owner, independent of customer_visible. Corrected 2026-10-07: only
+    # owner="customer" is editable — "both" is visible but read-only (Valqeron also has a hand in it).
     by_title = {t["title"]: t for t in body["tasks"]}
     assert by_title["Voorstel akkoord"]["editable"] is True  # owner=customer
-    assert by_title["DPA getekend"]["editable"] is True  # owner=both
+    assert by_title["DPA getekend"]["editable"] is False  # owner=both — no longer editable
+    assert by_title["Technisch contactpersoon toewijzen"]["editable"] is True  # owner=customer
     assert by_title["Training gegeven"]["editable"] is False  # owner=valqeron, visible but read-only
 
     # Phase 2 has 2 of its (customer-visible) tasks counted, 1 done
@@ -147,7 +150,7 @@ def test_patch_updates_an_editable_customer_visible_task():
     org_id, _, username = _new_org_with_user()
     token = _token(username, org_id)
     _, _, task_ids = _make_account_with_project(org_id=org_id)
-    task_id = task_ids["DPA getekend"]
+    task_id = task_ids["Technisch contactpersoon toewijzen"]  # owner=customer
 
     res = client.patch(f"/onboarding/tasks/{task_id}", json={"status": "done"}, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
@@ -157,6 +160,23 @@ def test_patch_updates_an_editable_customer_visible_task():
     task = db.query(OnboardingTask).filter(OnboardingTask.id == task_id).first()
     assert task.status == "done"
     assert task.completed_at is not None
+    db.close()
+
+
+def test_patch_rejects_a_task_owned_by_both():
+    """Corrected 2026-10-07: owner="both" is visible but no longer customer-writable — Valqeron
+    also has a hand in it, so a lone customer toggle would be misleading."""
+    org_id, _, username = _new_org_with_user()
+    token = _token(username, org_id)
+    _, _, task_ids = _make_account_with_project(org_id=org_id)
+    task_id = task_ids["DPA getekend"]  # owner=both, customer_visible=True
+
+    res = client.patch(f"/onboarding/tasks/{task_id}", json={"status": "done"}, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 404
+
+    db = SessionLocal()
+    task = db.query(OnboardingTask).filter(OnboardingTask.id == task_id).first()
+    assert task.status == "todo"  # untouched
     db.close()
 
 
@@ -184,7 +204,7 @@ def test_patch_rejects_skipped_and_blocked_and_extra_fields():
     org_id, _, username = _new_org_with_user()
     token = _token(username, org_id)
     _, _, task_ids = _make_account_with_project(org_id=org_id)
-    task_id = task_ids["DPA getekend"]
+    task_id = task_ids["Technisch contactpersoon toewijzen"]  # owner=customer, so the 422s are unambiguously about the body
 
     for body in ({"status": "skipped"}, {"status": "blocked"}, {"status": "done", "note": "hello"}):
         res = client.patch(f"/onboarding/tasks/{task_id}", json=body, headers={"Authorization": f"Bearer {token}"})
@@ -195,7 +215,7 @@ def test_patch_on_another_organizations_task_gives_404():
     org_a, _, user_a = _new_org_with_user()
     org_b, _, user_b = _new_org_with_user()
     _, _, task_ids = _make_account_with_project(org_id=org_a)
-    task_id = task_ids["DPA getekend"]
+    task_id = task_ids["Technisch contactpersoon toewijzen"]  # owner=customer, so the 404 is purely about org isolation
     token_b = _token(user_b, org_b)
 
     res = client.patch(f"/onboarding/tasks/{task_id}", json={"status": "done"}, headers={"Authorization": f"Bearer {token_b}"})
@@ -212,7 +232,7 @@ def test_patch_audit_log_has_no_note_or_account_text(caplog):
     org_id, _, username = _new_org_with_user()
     token = _token(username, org_id)
     _, _, task_ids = _make_account_with_project(org_id=org_id)
-    task_id = task_ids["DPA getekend"]
+    task_id = task_ids["Technisch contactpersoon toewijzen"]  # owner=customer
 
     res = client.patch(f"/onboarding/tasks/{task_id}", json={"status": "done"}, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
@@ -236,7 +256,7 @@ def test_audit_chain_stays_valid_after_customer_patch():
     org_id, _, username = _new_org_with_user()
     token = _token(username, org_id)
     _, _, task_ids = _make_account_with_project(org_id=org_id)
-    task_id = task_ids["DPA getekend"]
+    task_id = task_ids["Technisch contactpersoon toewijzen"]  # owner=customer
     client.patch(f"/onboarding/tasks/{task_id}", json={"status": "done"}, headers={"Authorization": f"Bearer {token}"})
 
     res = client.get("/audit/verify", headers={"Authorization": f"Bearer {token}"})
