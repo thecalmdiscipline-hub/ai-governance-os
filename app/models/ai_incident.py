@@ -19,3 +19,4 @@ class AIIncident(Base):
     ai_system_id = Column(Integer, ForeignKey("ai_systems.id"))
 
     ai_system = relationship("AISystem", back_populates="incidents")
+    corrective_actions = relationship("CorrectiveAction", back_populates="ai_incident")
