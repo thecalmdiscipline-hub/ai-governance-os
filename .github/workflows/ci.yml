@@ -20,7 +20,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          # Batch R (2026-10-07): matches production's 3.12.3 (see CLAUDE.md §2) so a regression
+          # that only shows up on 3.12 is no longer invisible to CI. Was 3.9 — the same version as
+          # the local dev venv, which existed only because requirements.txt's presidio/spacy pins
+          # once needed it; production has run 3.12 since before this project started tracking it.
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
