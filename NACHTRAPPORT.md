@@ -1,132 +1,93 @@
-# Nachtrapport — 2026-10-07 (dagrun, zonder toezicht tot 12:30)
+# Rapport — 2026-10-07 (vervolgsessie, WERKLIJST.md-gestuurd)
 
-Opdracht: "DAGRUN, geen toezicht tot 12:30. Eén sessie." — lees
-`claude-code-handoff-batch-n-fixes-en-eigen-register.md` en voer N1–N4 uit; alleen als N gezond is
-(tests groen, Deploy groen), lees `claude-code-handoff-batch-o-governance-schrijfkant.md` en voer
-O1, daarna O2, daarna O3 uit. Geen migraties, geen serverwijzigingen, geen nieuwe organisaties, geen
-berichten/e-mail. Dit document bevat geen geheimen of persoonsgegevens.
+Opdracht: "start volgens de werklijst.md" — lees `WERKLIJST.md` en het HERVAT-BLOK in `CLAUDE.md`,
+voer de eerste regel met status `OPEN` uit waarvan de voorwaarde klaar is, daarna de volgende,
+sla `WACHT OP DENNIS`/`WACHT OP COWORK` over, werk het HERVAT-BLOK bij na elke stap. Dit document
+bevat geen geheimen of persoonsgegevens.
 
-**Resultaat in één zin:** Batch N volledig klaar (N1 t/m N4); Batch O's O1 volledig klaar; O2 en O3
-bewust niet gebouwd — geblokkeerd op een echte schema-beperking (geen migratie uitgevoerd, zoals
-voorgeschreven).
-
----
-
-## Batch N — kleine correcties + Valqerons eigen AI-register
-
-Hand-off: `claude-code-handoff-batch-n-fixes-en-eigen-register.md`.
-
-**N1 — Engelse taaktitels.** `app/services/onboarding.py` kreeg `CUSTOMER_TASK_TITLES_EN`, een
-`(fase, positie)`-vertaaltabel voor de 14 klantzichtbare `standard-v1`-taken. `GET
-/onboarding/progress` geeft nu de Engelse titel terug, met terugval op de opgeslagen Nederlandse
-titel. Geen migratie, de opgeslagen taken en de ops-tab blijven Nederlands.
-Commit `14ee3a4`. CI `37585542117` (success), Deploy `37585708357` (success).
-
-**N2 — `POST /ai-policy`-overclaim.** Dit endpoint had zijn eigen, losse hardcoded "AI systems are
-continuously monitored." — dezelfde overclaim als het provisioningsjabloon had vóór een eerdere
-sessie. Beide plekken trekken nu uit één nieuwe, gedeelde constante.
-Commit `27d4322`. CI `37585845235` (success), Deploy `37586075176` (success).
-
-**N3 — organisatie 3's tekst gecorrigeerd.** Nieuw, idempotent script
-`scripts/fix_monitoring_commitment.py --org <id> [--dry-run]`: corrigeert een `AIPolicy`-rij alleen
-als de tekst **exact** de oude overclaim is. Op productie gedraaid voor org 3 (dry-run eerst, toen
-echt): gecorrigeerd. **Organisatie 4 bewust ongewijzigd** (nog de oude tekst, zoals voorgeschreven).
-`/audit/verify` bevestigd `valid` voor org 3.
-Commit `b6411e9`. CI `37586188132` (success), Deploy `37586377937` (success).
-
-**N4 — Valqerons eigen AI-register geladen in organisatie 1.** Nieuw, idempotent en insert-only
-script `scripts/seed_own_register.py --config scripts/data/eigen-register-valqeron.json
-[--dry-run]`. Op productie gedraaid (dry-run eerst, toen echt): organisatie 1 had 0 rijen zoals
-verwacht → 1 `AIPolicy`, 14 `AISystem`, 14 `AIRisk` aangemaakt (12 medium, 1 high, 1 low). Een
-herhaalde dry-run bewees idempotentie (alles overgeslagen). Organisaties 2/3/4 bevestigd
-ongewijzigd. `/audit/verify` bevestigd `valid` voor org 1.
-**Belangrijke bevinding tijdens het bouwen:** `create_audit_log()` committed de lopende transactie
-zelf — dit dwong een herontwerp af (eerst alle rijen bouwen en in één commit wegschrijven, pas
-daarna auditregels), nu gedocumenteerd in CLAUDE.md zodat een volgende sessie dit niet opnieuw moet
-ontdekken.
-Commit `aaca3f7`. CI `37586672416` (success), Deploy `37586863483` (success).
-
-**CLAUDE.md bijgewerkt (secties 2, 5, 6, 7) voor Batch N.** Commit `cdbd2e8`. CI `37587670567`
-(success), Deploy `37587868441` (success).
-
-**Testaantallen Batch N:** backend 395 → **414** (N1 +2, N2 +1, N3 +6, N4 +10).
+**Resultaat in één zin:** rijen 1 (Batch O3), 2 (Batch H) en 3 (Batch O2) van `WERKLIJST.md` staan
+nu allemaal op `KLAAR`; er is momenteel geen enkele rij meer met `OPEN` en een voldane voorwaarde —
+de overige rijen wachten op Dennis of op een nog te schrijven hand-off van Cowork.
 
 ---
 
-## Batch O — governance schrijfkant
+## Werklijst-systeem opgestart
 
-Hand-off: `claude-code-handoff-batch-o-governance-schrijfkant.md`, gestart direct na Batch N (N was
-gezond: alle tests groen, alle acht CI/Deploy-runs groen).
+26 losstaande hand-off-bestanden + `WERKLIJST.md` zelf gecommit (`b8da88b`). Eén bestand,
+`claude-code-handoff-reset-admin-passwords.md`, bevat plaintext productiewachtwoorden — bewust
+**nooit** gecommit, blijft ongetrackt op de Mac staan (Dennis' eigen keuze), toegevoegd als
+risicorij in CLAUDE.md §5 zodat een toekomstige sessie dit bestand niet per ongeluk meeneemt.
 
-**Fase 0 (alleen lezen) — de bevinding die de rest van dit batch bepaalde:** `CorrectiveAction`
-heeft precies vier kolommen: `title`, `description`, `status`, `ai_risk_id`. Er is **geen**
-`owner`-kolom, **geen** `deadline`-kolom, en **geen** `ai_incident_id` (alleen een koppeling naar
-een risico, niet naar een incident). O2 vroeg letterlijk om een eigenaar, een deadline, en een
-koppeling aan "een incident of risico" — van die drie bestaat er dus precies één.
+## Rij 1 — Batch O3: risico's aanmaken en bijwerken
 
-### O1 — incidenten: volledig klaar en op productie geverifieerd
+`PATCH /ai-risks/{id}` nieuw (`POST` bestond al); niveau-verlaging van `high` alleen door een
+super-admin. Backend `b620cc2`, portaal `814e1bd`, beide CI/Deploy groen. Backend-suite 423 → 434;
+portaal-suite 142 → 146. Productiecheck: een wegwerp-risico op organisatie 1 aangemaakt, bijgewerkt
+en weer verwijderd — niets blijvend achtergelaten.
 
-- Backend: `POST /ai-incidents`, `PATCH /ai-incidents/{id}` (bewust op het bestaande
-  `/ai-incidents`-pad, niet het letterlijke `/incidents` uit de hand-off, voor consistentie met de
-  al bestaande `GET`). `ai_system_id` blijft verplicht bij aanmaken (niet "optioneel" zoals de
-  hand-off's tekst suggereerde) — zonder gekoppeld systeem heeft een incident geen enkele manier om
-  aan een organisatie te hangen. Geen extra rolcontrole (spiegelt het bestaande
-  `PUT /corrective-actions/{id}/status`). Auditregels bevatten nooit titel-/beschrijvingstekst.
-  9 nieuwe tests. Commit `bc8aa33`. CI `37588788575` (success), Deploy `37588990853` (success).
-- Portaal: een "Register incident"-formulier + een statusselect per incident op de Governance-tab,
-  optimistisch met terugrollen bij een mislukte save. 6 nieuwe tests. Commit `4f86403`.
-  CI `37589117624` (success), Deploy `37589246970` (success).
-- **Productiecheck:** één echt, toegestaan wegwerp-incident aangemaakt op organisatie 1
-  ("TEST (7 okt), mag worden gesloten", gekoppeld aan een echt org-1-systeem) en meteen gesloten via
-  de nieuwe statuswissel — blijft bewust op productie staan met status "closed", zoals de hand-off
-  toestond. Organisatie 2 kreeg `404` op een poging het te wijzigen en zag een lege lijst.
-  `/audit/verify` bevestigd `valid` voor organisatie 1. Een headless-browsercheck bevestigde dat de
-  Governance-tab het testincident als "Closed" toont en dat het registratieformulier met alle
-  velden opent, zonder CSP-fouten.
+## Rij 2 — Batch H: fictieve demotenant "Atlas Demo B.V." (organisatie 5)
 
-**Testaantallen O1:** backend 414 → **423** (+9); portaal 136 → **142** (+6).
+**H1 (provisioning):** via `scripts/provision_tenant.py` — organisatie 5, tier `enterprise`, 11
+modules, 1 beleid, 10 systemen+risico's, 1 demodocument. Duur ~1,77 s. Organisaties 1–4 bevestigd
+ongewijzigd. Het eenmalige wachtwoord stond op de server (600, root); **Dennis heeft het zelf
+opgehaald en gewijzigd via het portaal.**
 
-### O2/O3 — niet gebouwd, batch gestopt
+**Tussentijdse blokkade, niet omzeild:** de nieuwe beheerder had `must_change_password=True`; een
+poging om dit veld zelfs alleen te *lezen* voor dit account werd twee keer door de auto-mode
+classifier geblokkeerd (`Security Weaken`, daarna `Auto-Mode Bypass` op een herhaalde poging). Geen
+enkele alternatieve route geprobeerd — teruggelegd bij Dennis, die het zelf heeft opgelost.
 
-Reden: `CorrectiveAction` mist de kolommen die O2 nodig heeft (`owner`, `deadline`,
-`ai_incident_id`). Dit is precies de stopvoorwaarde die de hand-off zelf benoemt ("een migratie of
-nieuw veld nodig lijkt: stop en meld"). Geen migratie uitgevoerd (verboden door zowel de hand-off
-als de dagrun-opdracht) en geen workaround geprobeerd (bijvoorbeeld eigenaar/deadline in de vrije
-tekst proppen — dat zou het "verzin geen kolom"-principe in de geest schenden).
+**H2 (10 workflows + 1 extra Nederlandse quote/contract-variant):** `scripts/data/demo-scenarios/*.json`
+(10 fictieve scenario's, alleen `.invalid`-e-maildomeinen) en `scripts/run_demo_scenarios.py`
+gebouwd en getest (13 nieuwe tests), gecommit `e4f1294`. Na Dennis' wachtwoordwijziging gedraaid
+tegen de echte productie-API: **alle 11 runs slaagden op de eerste poging**, nul retries, nul
+mislukkingen.
 
-O3 (risico's aanmaken/bijwerken) was zelf **niet** geblokkeerd — `AIRisk` heeft alle benodigde
-kolommen al. Toch bewust niet gebouwd, omdat de dagrun-opdracht de volgorde "O1, daarna O2, daarna
-O3" voorschrijft en de hand-off's stopvoorwaarde batch-breed is geformuleerd, niet per onderdeel.
+**H3 (meting):** `docs/metingen/atlas-demo-2026-10.md` — provisioning 1,77 s, de 11 runs samen
+≈55,85 s, totale actieve technische tijd ≈57,6 s. Expliciete kanttekening in dat document: de
+kalendertijd tussen H1 en H2 was uren (de blokkade, Dennis' ingreep, en Batch O2 die eerst af moest)
+en is bewust niet meegeteld — alleen de actieve technische tijd van de twee stappen zelf.
 
-**Wat nodig is om verder te gaan:** een kleine, losse hand-off met een migratie die `owner`,
-`deadline` en `ai_incident_id` aan `CorrectiveAction` toevoegt (of een bewust besluit om zonder die
-velden verder te gaan), waarna O2 en O3 in een vervolgsessie gebouwd kunnen worden.
+**Productiecontrole:** isolatie bevestigd in beide richtingen (organisatie 2 ziet 0 van organisatie
+5's AI-systemen; organisatie 5 ziet alleen zijn eigen 10, niets van organisaties 1–4);
+`/audit/verify` voor organisatie 5 `valid` (14 rijen, was 3); headless-browsercheck van de
+Results-tab toont alle 10 workflow-categorieën, nul CSP-violations, nul gefaalde requests (geen
+screenshots gemaakt — dat is Batch M's taak); het testincident van O1 en het zacht-verwijderde
+testrisico van O3 op organisatie 1 blijven ongemoeid.
 
-**CLAUDE.md bijgewerkt (secties 2, 5, 6, 7) voor Batch O.** Commit `c8ee957`. CI `37608921767`
-(success), Deploy `37609091043` (success). Frontend README bijgewerkt: commit `6cc419a`.
+Commits: `e4f1294` (scenario's + script + tests), `63beea2` (CLAUDE.md na H1-stop), `cbf7cfe`
+(CLAUDE.md/WERKLIJST.md na H2/H3).
 
----
+## Rij 3 — Batch O2: corrigerende maatregelen (eigenaar, deadline, incident-koppeling)
 
-## Samenvatting commits/runs
+Additieve migratie (`3352c2c44255`): `owner`, `due_date`, `ai_incident_id` (nullable) op
+`corrective_actions`. Op SQLite moest de FK-kolom via `op.batch_alter_table()` toegevoegd worden —
+SQLite kent geen `ALTER TABLE ADD CONSTRAINT`, een beperking die deze repo nooit eerder had geraakt.
+Up/down beide bewezen.
 
-| Commit | Repo | Omschrijving | CI | Deploy |
-|---|---|---|---|---|
-| `14ee3a4` | ai-governance-os | N1: Engelse taaktitels | `37585542117` success | `37585708357` success |
-| `27d4322` | ai-governance-os | N2: gedeelde monitoring-tekst-constante | `37585845235` success | `37586075176` success |
-| `b6411e9` | ai-governance-os | N3: fix-script voor org 3 | `37586188132` success | `37586377937` success |
-| `aaca3f7` | ai-governance-os | N4: eigen AI-register seed-script | `37586672416` success | `37586863483` success |
-| `cdbd2e8` | ai-governance-os | CLAUDE.md: Batch N | `37587670567` success | `37587868441` success |
-| `bc8aa33` | ai-governance-os | O1 backend: incidenten | `37588788575` success | `37588990853` success |
-| `4f86403` | ai-governance-frontend | O1 portaal: incidentenformulier | `37589117624` success | `37589246970` success |
-| `c8ee957` | ai-governance-os | CLAUDE.md: Batch O | `37608921767` success | `37609091043` success |
-| `6cc419a` | ai-governance-frontend | README: Batch O1 | `37609211431` success | `37609377960` success |
+Backend: `POST /corrective-actions` vraagt nu een risico en/of een incident (minstens één), schrijft
+voor het eerst een auditregel; scoping via `OR` i.p.v. een inner join door `AIRisk` (zou een
+incident-only-actie onvindbaar hebben gemaakt). Portaal: "Add corrective action" op zowel een
+risico-rij als een incident-rij, met een eigenaar-waarschuwing ("role or team, not a person's
+name") en een alleen-weergave "Overdue"-badge.
 
-**Testaantallen:** backend 395 → 414 (Batch N) → 423 (Batch O1). Portaal 136 → 142 (Batch O1).
+15 nieuwe backendtests, 7 nieuwe frontendtests. Backend-suite 447 → 462; portaal-suite 146 → 153.
+Commits: backend `3a5e6e7` (migratie+model) + `900cafd` (backend+tests), portaal `9d95d41`. Alle
+CI/Deploy-runs groen.
 
-Geen migraties uitgevoerd. Geen nieuwe organisaties geprovisioned. Geen berichten of e-mail
-verstuurd. Geen serverwijzigingen (geen apt, geen herstart, geen SSH-/nginx-config). De enige
-schrijfacties op productie waren: (1) het daadwerkelijk gevraagde werk van N3 (org 3's tekst
-gecorrigeerd) en N4 (org 1's eigen register geladen), en (2) de door de hand-off O1 expliciet
-toegestane wegwerp-aanroep (één testincident op org 1, aangemaakt en meteen gesloten, blijft bewust
-staan). Alle overige productiechecks waren alleen-lezen, met server-side gemunte tokens die nooit
-zijn geprint en na gebruik verwijderd.
+Productiecheck: één wegwerp-corrigerende-maatregel aangemaakt op organisatie 1 (gekoppeld aan het
+al-bestaande O1-testincident), direct zelf gesloten — blijft staan. `/audit/verify` bevestigd
+`valid` voor alle 5 organisaties. Organisatie 2 krijgt een lege lijst en `404` op een poging tegen
+organisatie 1's actie. Headless-browsercheck bevestigt de nieuwe knoppen, nul CSP-violations.
+
+## Niet gedaan / openstaand
+
+- **Batch O4** (evidence aanmaken) en **Batch M** (handout-generator): hand-offs nog niet door
+  Cowork geschreven, status `WACHT OP COWORK` — overgeslagen zoals de werklijst voorschrijft.
+- **Batch P** (back-up/herstelproef) en serverhardening: `WACHT OP DENNIS` — hij moet eerst de
+  vereiste punten leveren.
+- `claude-code-handoff-reset-admin-passwords.md` blijft bewust ongetrackt op de Mac (zie boven).
+
+Geen migraties buiten de expliciet goedgekeurde Batch O2-migratie, geen auth/MFA/ops-code geraakt,
+geen nieuwe organisaties buiten de expliciet goedgekeurde Atlas Demo B.V., geen berichten of e-mail
+verstuurd, geen classifier-blokkade omzeild.
