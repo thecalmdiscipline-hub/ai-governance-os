@@ -1,9 +1,10 @@
 import json
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import (
@@ -29,6 +30,7 @@ from app.models import (
     ProductionApproval,
 )
 from app.models.user import User
+from app.schemas.ai_incident import AIIncidentResponse
 from app.schemas.ai_policy import AIPolicyCreate, AIPolicyResponse
 from app.schemas.ai_risk import AIRiskCreate, AIRiskResponse
 from app.schemas.ai_system import AISystemCreate, AISystemResponse, AISystemUpdate
@@ -37,7 +39,7 @@ from app.schemas.corrective_action import (
     CorrectiveActionResponse,
     CorrectiveActionStatusUpdate,
 )
-from app.schemas.evidence import EvidenceCreate
+from app.schemas.evidence import EvidenceCreate, EvidenceResponse
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
 
 router = APIRouter(tags=["Governance"])
@@ -607,8 +609,21 @@ def update_corrective_action_status(
     if not update.reason or update.reason.strip() == "":
         raise HTTPException(status_code=400, detail="Justification required")
 
+    old_status = action.status
     action.status = update.new_status
     db.commit()
+
+    # Added Batch L, Deel B (2026-10-07): this endpoint previously never wrote an audit entry at
+    # all. details carries only the old/new status, never update.reason (free text).
+    create_audit_log(
+        db=db,
+        organization_id=action.ai_risk.ai_system.organization_id,
+        entity_type="corrective_action",
+        entity_id=action.id,
+        action="corrective_action_status_changed",
+        details=f"{old_status}->{action.status}",
+        performed_by=current_user.username,
+    )
 
     return {"action_id": action.id, "new_status": action.status}
 
@@ -698,3 +713,119 @@ def create_evidence(
     db.refresh(evidence)
 
     return {"evidence_id": evidence.id, "title": evidence.title}
+
+
+# -------------------------
+# CUSTOMER-FACING GOVERNANCE LISTS (read-only; Batch L, Deel B, 2026-10-07)
+# -------------------------
+# Fase 0 found that none of these list endpoints existed at all (only the aggregate
+# governance-snapshot/iso-score did) — not just incidents/evidence as the hand-off assumed. Every
+# endpoint below is scoped to current_user.organization_id only (never a path/query parameter), so
+# there is nothing here for organization_id to leak through. Soft-deleted rows (is_deleted=True)
+# are excluded, matching the existing single-item lookups (get_org_scoped_system/_risk).
+
+@router.get("/ai-policy", response_model=List[AIPolicyResponse])
+def list_ai_policies(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AIPolicy)
+        .filter(AIPolicy.organization_id == current_user.organization_id)
+        .order_by(AIPolicy.id.desc())
+        .all()
+    )
+
+
+@router.get("/ai-systems", response_model=List[AISystemResponse])
+def list_ai_systems(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AISystem)
+        .filter(AISystem.organization_id == current_user.organization_id, AISystem.is_deleted == False)
+        .order_by(AISystem.id.desc())
+        .all()
+    )
+
+
+@router.get("/ai-risks", response_model=List[AIRiskResponse])
+def list_ai_risks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AIRisk)
+        .join(AISystem)
+        .filter(
+            AISystem.organization_id == current_user.organization_id,
+            AISystem.is_deleted == False,
+            AIRisk.is_deleted == False,
+        )
+        .order_by(AIRisk.id.desc())
+        .all()
+    )
+
+
+@router.get("/ai-incidents", response_model=List[AIIncidentResponse])
+def list_ai_incidents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AIIncident)
+        .join(AISystem)
+        .filter(
+            AISystem.organization_id == current_user.organization_id,
+            AISystem.is_deleted == False,
+            AIIncident.is_deleted == False,
+        )
+        .order_by(AIIncident.id.desc())
+        .all()
+    )
+
+
+@router.get("/corrective-actions", response_model=List[CorrectiveActionResponse])
+def list_corrective_actions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(CorrectiveAction)
+        .join(AIRisk, CorrectiveAction.ai_risk_id == AIRisk.id)
+        .join(AISystem, AIRisk.ai_system_id == AISystem.id)
+        .filter(
+            AISystem.organization_id == current_user.organization_id,
+            AISystem.is_deleted == False,
+            AIRisk.is_deleted == False,
+        )
+        .order_by(CorrectiveAction.id.desc())
+        .all()
+    )
+
+
+@router.get("/evidence", response_model=List[EvidenceResponse])
+def list_evidence(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    system_ids = (
+        db.query(AISystem.id)
+        .filter(AISystem.organization_id == current_user.organization_id, AISystem.is_deleted == False)
+    )
+    risk_ids = (
+        db.query(AIRisk.id)
+        .join(AISystem)
+        .filter(
+            AISystem.organization_id == current_user.organization_id,
+            AISystem.is_deleted == False,
+            AIRisk.is_deleted == False,
+        )
+    )
+    return (
+        db.query(Evidence)
+        .filter(or_(Evidence.ai_system_id.in_(system_ids), Evidence.ai_risk_id.in_(risk_ids)))
+        .order_by(Evidence.id.desc())
+        .all()
+    )

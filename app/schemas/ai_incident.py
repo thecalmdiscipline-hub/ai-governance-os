@@ -16,6 +16,7 @@ class AIIncidentResponse(BaseModel):
     description: Optional[str]
     severity: Literal["low", "medium", "high", "critical"]
     detected_at: datetime
+    status: str
     ai_system_id: int
 
     model_config = {"from_attributes": True}
