@@ -1,0 +1,14 @@
+{
+  "fictional": true,
+  "workflow_key": "hr_recruitment",
+  "input": {
+    "candidate_name": "Priya Anand",
+    "role": "Junior Operations Coordinator",
+    "experience": "2 years in logistics coordination for a regional distribution company",
+    "skills": "Scheduling, vendor communication, spreadsheet reporting, basic SQL",
+    "education": "BSc Business Administration, fictitious regional university",
+    "resume": "Fictitious resume for demo purposes: coordinated weekly delivery schedules for a 20-person warehouse team, reduced late deliveries by improving the handoff process between shifts.",
+    "motivation": "Looking to grow into a role with more cross-team coordination and process-improvement responsibility.",
+    "notes": "Demo candidate, not a real applicant."
+  }
+}

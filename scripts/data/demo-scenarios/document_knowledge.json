@@ -1,0 +1,7 @@
+{
+  "fictional": true,
+  "workflow_key": "document_knowledge",
+  "input": {
+    "question": "What are our office opening hours, and how quickly are support requests answered?"
+  }
+}

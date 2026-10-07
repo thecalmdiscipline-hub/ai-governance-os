@@ -1,0 +1,18 @@
+{
+  "fictional": true,
+  "workflow_key": "sales_lead_qualification",
+  "input": {
+    "lead": {
+      "company": "Meridian Fixtures Group",
+      "email": "j.vantassel@meridian-fixtures.invalid",
+      "name": "Jana van Tassel",
+      "title": "Head of Operations",
+      "industry": "Industrial equipment manufacturing",
+      "revenue": "4.2M EUR",
+      "employees": "65",
+      "website": "https://meridian-fixtures.invalid",
+      "pain_points": "Manual compliance checks for new EU AI Act requirements are slowing down product approvals."
+    },
+    "source": "inbound"
+  }
+}

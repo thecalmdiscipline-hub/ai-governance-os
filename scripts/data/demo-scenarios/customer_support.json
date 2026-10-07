@@ -1,0 +1,10 @@
+{
+  "fictional": true,
+  "workflow_key": "customer_support",
+  "input": {
+    "customer_name": "Marcus Delacroix",
+    "product": "Atlas Demo Scheduling Module",
+    "priority": "medium",
+    "issue": "The customer reports that recurring appointments stopped syncing to their calendar after the last update, and asks whether this affects billing."
+  }
+}

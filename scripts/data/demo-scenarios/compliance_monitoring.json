@@ -1,0 +1,11 @@
+{
+  "fictional": true,
+  "workflow_key": "compliance_monitoring",
+  "input": {
+    "organization_name": "Atlas Demo B.V.",
+    "framework": "ISO 42001",
+    "control_area": "AI system risk assessment and documentation",
+    "policy_text": "Atlas Demo B.V. uses AI systems only for purposes documented in its internal AI register. Every AI system is assigned an owner and reviewed at least annually. Personal data is minimised and anonymised before any external model call.",
+    "current_findings": "A recent internal review noted that one AI system's risk assessment had not been updated in over 14 months."
+  }
+}

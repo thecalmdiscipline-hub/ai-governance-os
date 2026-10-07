@@ -1,0 +1,13 @@
+{
+  "fictional": true,
+  "workflow_key": "marketing_automation",
+  "input": {
+    "campaign": "Launch of the fictitious 'Atlas Scheduler Pro' add-on",
+    "audience": "Operations managers at mid-sized logistics and facilities companies",
+    "product": "Atlas Scheduler Pro (fictitious scheduling add-on)",
+    "goals": "Generate qualified demo requests ahead of the fictitious Q1 2027 release",
+    "budget": "limited, approx. 5k EUR",
+    "industry": "Logistics and facilities management",
+    "current_channels": "Email newsletter, LinkedIn organic posts"
+  }
+}

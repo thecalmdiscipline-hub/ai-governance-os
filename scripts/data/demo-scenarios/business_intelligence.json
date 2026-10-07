@@ -1,0 +1,10 @@
+{
+  "fictional": true,
+  "workflow_key": "business_intelligence",
+  "input": {
+    "question": "Which three KPIs should Atlas Demo B.V. track monthly to catch delivery delays early?",
+    "company_size": "65 employees (fictitious)",
+    "time_period": "last 6 months",
+    "context_data": "Fictitious context: average order volume is 1,200 per month, late-delivery rate has risen from 3% to 7% over the last two quarters."
+  }
+}

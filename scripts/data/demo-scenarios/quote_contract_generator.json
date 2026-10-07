@@ -1,0 +1,45 @@
+{
+  "fictional": true,
+  "workflow_key": "quote_contract_generator",
+  "input": {
+    "customer": {
+      "name": "Marcus Delacroix",
+      "company": "Fictitious Client Ltd",
+      "email": "m.delacroix@fictitious-client.invalid",
+      "address": "12 Example Street, Sheffield, UK (fictitious)"
+    },
+    "project_description": "Implementation of a governed AI control layer for the fictitious client's internal support workflow.",
+    "scope": "Setup of one workflow (customer support triage), onboarding of two administrator accounts, one training session.",
+    "special_requirements": "Fictitious requirement: go-live must happen before the fictitious client's Q1 2027 audit.",
+    "currency": "GBP",
+    "vat_rate": 0.20,
+    "payment_terms_days": 30,
+    "valid_days": 14,
+    "output_language": "en",
+    "items": [
+      {"description": "Workflow setup and configuration", "qty": 1, "unit_price": 2500},
+      {"description": "Administrator training session", "qty": 1, "unit_price": 450}
+    ]
+  },
+  "_comment_extra_variant": "The hand-off allows one extra quote_contract_generator run in Dutch to show the language choice. run_demo_scenarios.py runs this as an additional call, not a replacement for the English one above.",
+  "extra_variant": {
+    "customer": {
+      "name": "Sanne Dekker",
+      "company": "Fictieve Klant B.V.",
+      "email": "s.dekker@fictieve-klant.invalid",
+      "address": "Voorbeeldstraat 12, Utrecht (fictief)"
+    },
+    "project_description": "Implementatie van een gecontroleerde AI-besturingslaag voor de fictieve klant se interne supportproces.",
+    "scope": "Inrichting van één workflow (customer support triage), onboarding van twee beheerdersaccounts, één trainingssessie.",
+    "special_requirements": "Fictieve eis: live-gang moet vóór de fictieve Q1 2027-audit van de klant plaatsvinden.",
+    "currency": "EUR",
+    "vat_rate": 0.21,
+    "payment_terms_days": 30,
+    "valid_days": 14,
+    "output_language": "nl",
+    "items": [
+      {"description": "Inrichting en configuratie van de workflow", "qty": 1, "unit_price": 2500},
+      {"description": "Trainingssessie voor beheerders", "qty": 1, "unit_price": 450}
+    ]
+  }
+}

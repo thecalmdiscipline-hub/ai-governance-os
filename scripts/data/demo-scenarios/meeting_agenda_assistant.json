@@ -1,0 +1,12 @@
+{
+  "fictional": true,
+  "workflow_key": "meeting_agenda_assistant",
+  "input": {
+    "title": "Q4 Operations Review (fictitious)",
+    "duration_min": 45,
+    "participants": ["Jana van Tassel", "Marcus Delacroix", "Priya Anand"],
+    "goals": ["Review fictitious Q4 delivery performance", "Agree on fictitious staffing plan for Q1"],
+    "meeting_type": "review",
+    "context": "Fictitious quarterly review meeting for Atlas Demo B.V.'s operations team."
+  }
+}

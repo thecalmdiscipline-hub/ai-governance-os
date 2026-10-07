@@ -1,0 +1,7 @@
+{
+  "fictional": true,
+  "workflow_key": "invoice_processing",
+  "input": {
+    "invoice_text": "INVOICE\nInvoice number: AD-2026-0042\nDate: 2026-09-15\nVendor: Solberg Office Supplies B.V.\nAddress: Industrieweg 12, 3542 AB Utrecht, The Netherlands\nVAT number: NL123456789B01\n\nBill to: Atlas Demo B.V.\n\nLine items:\n1. Ergonomic desk chairs (x4) - unit price 189.00 EUR - total 756.00 EUR\n2. Standing desks (x2) - unit price 420.00 EUR - total 840.00 EUR\n3. Office plant subscription (monthly) - unit price 35.00 EUR - total 35.00 EUR\n\nSubtotal: 1631.00 EUR\nVAT (21%): 342.51 EUR\nTotal: 1973.51 EUR\n\nPayment terms: 30 days net."
+  }
+}
