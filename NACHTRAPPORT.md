@@ -1,138 +1,116 @@
-# Rapport — 2026-10-07 (vervolgsessie, WERKLIJST.md-gestuurd)
+# Rapport — 2026-10-12 (Claude Code, A6: ISO Cert International-prospectvideo opnieuw)
 
-Opdracht: "start volgens de werklijst.md" — lees `WERKLIJST.md` en het HERVAT-BLOK in `CLAUDE.md`,
-voer de eerste regel met status `OPEN` uit waarvan de voorwaarde klaar is, daarna de volgende,
-sla `WACHT OP DENNIS`/`WACHT OP COWORK` over, werk het HERVAT-BLOK bij na elke stap. Dit document
-bevat geen geheimen of persoonsgegevens.
+Opdracht van Dennis: "Lees WERKLIJST.md en het HERVAT-BLOK in CLAUDE.md. Op last van Dennis
+(8 okt): voer rij 8 (A6, ISO CERT-video opnieuw) nu uit, vóór rij 5 (Batch M). Zet in
+WERKLIJST.md rij 5 daarvoor op wachten en zet de volgorde terug als rij 8 KLAAR is. Volg de
+stopregels uit de hand-off, commit en push niets dat geheimen bevat, verzend niets en schrijf
+aan het eind NACHTRAPPORT.md." Dit document bevat geen geheimen of persoonsgegevens.
 
-**Resultaat in één zin:** rijen 1 (Batch O3), 2 (Batch H), 3 (Batch O2), 4 (Batch O4) en 9 (Batch R)
-van `WERKLIJST.md` staan nu allemaal op `KLAAR`; er is momenteel geen enkele rij meer met `OPEN` en
-een voldane voorwaarde — de overige rijen wachten op Dennis of op een nog te schrijven hand-off van
-Cowork.
+**Resultaat in één zin:** A6 (rij 8) is volledig af — een nieuwe prospectvideo (4:37,9 min) en
+PDF (17 pagina's) voor ISO Cert International, die alle negen eerder gemiste prospectpunten
+direct beantwoordt met alleen bestaande productcapaciteiten, staan lokaal klaar maar zijn
+**niet verzonden**; WERKLIJST.md rij 8 staat op `KLAAR`, rij 5 (Batch M) is teruggezet op
+`OPEN` en is nu de volgende uitvoerbare rij.
 
 ---
 
-## Werklijst-systeem opgestart
+## Wat is er gebeurd
 
-26 losstaande hand-off-bestanden + `WERKLIJST.md` zelf gecommit (`b8da88b`). Eén bestand,
-`claude-code-handoff-reset-admin-passwords.md`, bevat plaintext productiewachtwoorden — bewust
-**nooit** gecommit, blijft ongetrackt op de Mac staan (Dennis' eigen keuze), toegevoegd als
-risicorij in CLAUDE.md §5 zodat een toekomstige sessie dit bestand niet per ongeluk meeneemt.
+Dennis had de vorige (2026-10-05) prospectvideo beoordeeld met 7,5/10 voor beeld maar 5/10 voor
+relevantie: negen specifieke punten die een certificatie-instelling (het fictieve ISO Cert
+International-scenario) had opgeworpen, misten een directe, concrete beantwoording. De hand-off
+`claude-code-handoff-a6-iso-cert-video-opnieuw.md` koppelt elk van de negen punten aan wat het
+product daadwerkelijk doet, de aanpak voor de video, en een vooraf goedgekeurde zin — met de
+harde regel: nooit overclaimen, twee ontbrekende capaciteiten (een los audit-rapport, een
+ingebouwde goedkeuringsstap) eerlijk als "on the roadmap" tonen in plaats van verzinnen.
 
-## Rij 1 — Batch O3: risico's aanmaken en bijwerken
+**Fase 0:** de meeste workflows hebben geen portaalformulier om een run te starten — alleen
+Document Knowledge heeft dat. Hergebruikt: hetzelfde hybride patroon uit de 2026-10-05-productie
+— runs starten via directe, echte API-calls tegen organisatie 4, en daarna een echte
+portaalscreenshot van dat resultaat via de Results-tab. Elke screenshot in de video/PDF is dus
+óf een echt, live portaalscherm, óf een duidelijk gelabeld, uit echte data opgebouwd technisch
+overzicht — nooit een verzonnen productscherm. Nieuwe bevinding: `AuditPage.tsx` bestaat wel in
+de frontendcode maar heeft geen navigatie-ingang — een klant ziet dit scherm nooit. Punt 9's
+audit-logbewijs is daarom getoond als een directe, expliciet gelabelde `/audit/verify`-API-
+respons (als technische terminal-output), niet als een niet-bestaand portaalscherm.
 
-`PATCH /ai-risks/{id}` nieuw (`POST` bestond al); niveau-verlaging van `high` alleen door een
-super-admin. Backend `b620cc2`, portaal `814e1bd`, beide CI/Deploy groen. Backend-suite 423 → 434;
-portaal-suite 142 → 146. Productiecheck: een wegwerp-risico op organisatie 1 aangemaakt, bijgewerkt
-en weer verwijderd — niets blijvend achtergelaten.
+**Runs en screenshots:** 13 echte workflow-runs via API + 1 echte run via de portaal-UI (Ask
+your documents) op organisatie 4, allemaal geslaagd. 5 fictieve Northbridge-documenten
+geüpload. 30+ echte screenshots/assets verzameld (portaalschermen + 4 zelfgebouwde, uit echte
+data opgebouwde technische overzichtspagina's: controlegebied-tabel, roadmap-kaarten,
+"naast-uw-eigen-systeem"-diagram, audit-verify-bewijs).
 
-## Rij 2 — Batch H: fictieve demotenant "Atlas Demo B.V." (organisatie 5)
+**Belangrijkste bevinding — een onbewezen claim gecorrigeerd vóór publicatie:** het eerste
+concept van scène 13 beweerde "Every governance action is recorded in a hash-chained audit
+log." Een directe code-audit van `app/api/governance.py` (elke write-endpoint gecontroleerd op
+een `create_audit_log()`-aanroep) toonde dit als feitelijk onjuist: vier endpoints
+(`POST /ai-systems`, `POST /ai-risks`, `DELETE /ai-risks/{id}`, `POST /production-approvals/
+{system_id}`) schrijven geen auditregel. Conform de hand-off se eigen regel ("klopt een regel
+niet, pas de aanpak aan — nooit de claim — en meld het") is de zin aangescherpt naar wat
+daadwerkelijk klopt, en die correctie is doorgevoerd in de narratie, de audio, het on-screen
+asset, het videoframe én de PDF — alle vier opnieuw gegenereerd en visueel herbevestigd.
 
-**H1 (provisioning):** via `scripts/provision_tenant.py` — organisatie 5, tier `enterprise`, 11
-modules, 1 beleid, 10 systemen+risico's, 1 demodocument. Duur ~1,77 s. Organisaties 1–4 bevestigd
-ongewijzigd. Het eenmalige wachtwoord stond op de server (600, root); **Dennis heeft het zelf
-opgehaald en gewijzigd via het portaal.**
+**Techniek onderweg:** de geïnstalleerde Homebrew-ffmpeg bleek zonder `drawtext`-filter gebouwd
+(geen `libfreetype`) — opgelost zonder herinstallatie door titel-overlays met Pillow direct op
+de screenshots te componeren, in dezelfde goud-op-donker stijl als eerdere producties. Zeer
+lange full-page-screenshots zijn gecapt op een leesbare hoogte in plaats van onleesbaar
+uitgerekt te worden.
 
-**Tussentijdse blokkade, niet omzeild:** de nieuwe beheerder had `must_change_password=True`; een
-poging om dit veld zelfs alleen te *lezen* voor dit account werd twee keer door de auto-mode
-classifier geblokkeerd (`Security Weaken`, daarna `Auto-Mode Bypass` op een herhaalde poging). Geen
-enkele alternatieve route geprobeerd — teruggelegd bij Dennis, die het zelf heeft opgelost.
+**Kwaliteitscontrole:** een verboden-woorden-scan (as-is, ready to send, automatically, fully,
+guarantee(d), continuous(ly), certified, compliant, "AI approves/decides") en een "elke absolute
+claim of elk getal heeft bewijs nodig"-scan zijn uitgevoerd over alle 15 scène-narraties en de
+4 asset-teksten — na de scène-13-correctie: 0 violaties. Alle 17 PDF-pagina's zijn naar PNG
+gerenderd en bekeken (geen lege pagina's, geen afgekapte afbeeldingen, geen losse
+onderschriften). 7 videoframes op verspreide tijdstippen zijn geëxtraheerd en bekeken
+(leesbaar, niets afgekapt, de correctie zichtbaar correct). `QUALITY-REPORT-v2.md` staat in de
+outputmap met de volledige puntsgewijze index (video-tijdstip + PDF-pagina + gebruikte zin per
+punt).
 
-**H2 (10 workflows + 1 extra Nederlandse quote/contract-variant):** `scripts/data/demo-scenarios/*.json`
-(10 fictieve scenario's, alleen `.invalid`-e-maildomeinen) en `scripts/run_demo_scenarios.py`
-gebouwd en getest (13 nieuwe tests), gecommit `e4f1294`. Na Dennis' wachtwoordwijziging gedraaid
-tegen de echte productie-API: **alle 11 runs slaagden op de eerste poging**, nul retries, nul
-mislukkingen.
+## Resultaat
 
-**H3 (meting):** `docs/metingen/atlas-demo-2026-10.md` — provisioning 1,77 s, de 11 runs samen
-≈55,85 s, totale actieve technische tijd ≈57,6 s. Expliciete kanttekening in dat document: de
-kalendertijd tussen H1 en H2 was uren (de blokkade, Dennis' ingreep, en Batch O2 die eerst af moest)
-en is bewust niet meegeteld — alleen de actieve technische tijd van de twee stappen zelf.
+- Video: `demo-assets/iso-cert-international/prospect/v2/video/ISO-Cert-International-Live-Environment-Walkthrough-PROSPECT-v2.mp4`
+  — 1280×720, 4:37,9 min, 5,0 MB, volledige decodeer-pass zonder fouten.
+- PDF: `demo-assets/iso-cert-international/prospect/v2/pdf/ISO-Cert-International-Live-Environment-Walkthrough-PROSPECT-v2.pdf`
+  — 17 pagina's, 5,6 MB.
+- Kwaliteitsrapport: `demo-assets/iso-cert-international/prospect/v2/QUALITY-REPORT-v2.md`.
+- **Alles staat uitsluitend lokaal.** `demo-assets/` is volledig gitignored (bevestigd vóór en
+  na dit werk met `git check-ignore`); niets van A6 is of wordt gecommit. **Niets is verzonden**
+  aan ISO Cert International of wie dan ook.
 
-**Productiecontrole:** isolatie bevestigd in beide richtingen (organisatie 2 ziet 0 van organisatie
-5's AI-systemen; organisatie 5 ziet alleen zijn eigen 10, niets van organisaties 1–4);
-`/audit/verify` voor organisatie 5 `valid` (14 rijen, was 3); headless-browsercheck van de
-Results-tab toont alle 10 workflow-categorieën, nul CSP-violations, nul gefaalde requests (geen
-screenshots gemaakt — dat is Batch M's taak); het testincident van O1 en het zacht-verwijderde
-testrisico van O3 op organisatie 1 blijven ongemoeid.
+## Productiecontrole (organisatie 4)
 
-Commits: `e4f1294` (scenario's + script + tests), `63beea2` (CLAUDE.md na H1-stop), `cbf7cfe`
-(CLAUDE.md/WERKLIJST.md na H2/H3).
+14 nieuwe runs (13 via API + 1 via de echte portaal-UI), 5 nieuwe fictieve documenten
+geüpload. Geen nieuwe gebruikers of wachtwoorden aangemaakt of gereset. Organisaties 1, 2, 3,
+5: niet aangeraakt.
 
-## Rij 3 — Batch O2: corrigerende maatregelen (eigenaar, deadline, incident-koppeling)
+## WERKLIJST.md en CLAUDE.md
 
-Additieve migratie (`3352c2c44255`): `owner`, `due_date`, `ai_incident_id` (nullable) op
-`corrective_actions`. Op SQLite moest de FK-kolom via `op.batch_alter_table()` toegevoegd worden —
-SQLite kent geen `ALTER TABLE ADD CONSTRAINT`, een beperking die deze repo nooit eerder had geraakt.
-Up/down beide bewezen.
-
-Backend: `POST /corrective-actions` vraagt nu een risico en/of een incident (minstens één), schrijft
-voor het eerst een auditregel; scoping via `OR` i.p.v. een inner join door `AIRisk` (zou een
-incident-only-actie onvindbaar hebben gemaakt). Portaal: "Add corrective action" op zowel een
-risico-rij als een incident-rij, met een eigenaar-waarschuwing ("role or team, not a person's
-name") en een alleen-weergave "Overdue"-badge.
-
-15 nieuwe backendtests, 7 nieuwe frontendtests. Backend-suite 447 → 462; portaal-suite 146 → 153.
-Commits: backend `3a5e6e7` (migratie+model) + `900cafd` (backend+tests), portaal `9d95d41`. Alle
-CI/Deploy-runs groen.
-
-Productiecheck: één wegwerp-corrigerende-maatregel aangemaakt op organisatie 1 (gekoppeld aan het
-al-bestaande O1-testincident), direct zelf gesloten — blijft staan. `/audit/verify` bevestigd
-`valid` voor alle 5 organisaties. Organisatie 2 krijgt een lege lijst en `404` op een poging tegen
-organisatie 1's actie. Headless-browsercheck bevestigt de nieuwe knoppen, nul CSP-violations.
-
-## Rij 4 — Batch O4: evidence aanmaken en bijwerken (metadata, geen bestanden)
-
-Fase 0-afwijking van de hand-off: `Evidence` heeft geen `ai_incident_id`-kolom (alleen
-`ai_system_id`/`ai_risk_id`) — de hand-off se prosa noemde ten onrechte "risico en/of incident",
-een verwarring met O2's patroon. Gebouwd tegen de echte kolommen, geen migratie.
-
-Backend: `POST /evidence` bestond al sinds Batch F maar schreef nooit een auditregel en gaf alleen
-`{evidence_id, title}` terug — nu de volledige respons, verplicht minstens één koppeling, schrijft
-voor het eerst `evidence_created`. Nieuwe `PATCH /evidence/{id}`. `file_reference` hergebruikt als
-vrije tekst ("waar wordt dit bewaard") — nooit een bestand. Portaal: "Add evidence" op een
-AI-systeemrij, een risicorij, en als algemene knop op de Evidence-sectie.
-
-14 nieuwe backendtests, 9 nieuwe frontendtests (+6 bestaande aangepast voor selector-ambiguïteit).
-Backend-suite 462 → 476; portaal-suite 153 → 162. Commits: backend `9ef6634`, portaal `d851a1b`.
-Alle CI/Deploy-runs groen.
-
-Productiecheck: één wegwerp-bewijsstuk aangemaakt op organisatie 1 (gekoppeld aan een echt
-AI-systeem), eenmaal bijgewerkt — blijft staan. `/audit/verify` bevestigd `valid` voor alle 5
-organisaties. Headless-browsercheck toont 29 "Add evidence"-knoppen (organisatie 1's eigen
-register uit Batch N4), nul CSP-violations.
-
-## Rij 9 — Batch R: technische schuld (CI 3.12, rate limiting `/ops/*`, certificaatcheck)
-
-Fase 0-correctie: CI draaide op Python 3.9, niet 3.10 zoals de hand-off stelde — geen stopreden,
-productie draait al sinds lang 3.12.3 met dezelfde dependency-pins.
-
-**R1:** `.github/workflows/ci.yml` naar Python 3.12. Geen dependency-wijziging nodig. **R2:**
-`app/core/rate_limiter.py` gegeneraliseerd (was hardcoded voor `/login`); nieuwe `rate_limit_ops`
-(60/60s per super-admin-gebruikers-id, niet IP), ingehangen in `require_ops_access` — automatisch
-op alle 5 `/ops/*`-routers. **R3:** nieuw `scripts/check_cert_expiry.py` (stdlib, geen nieuwe
-dependency), echt gedraaid tegen de drie productiedomeinen: alle drie 43 dagen resterend.
-
-6 + 8 nieuwe tests. Backend-suite 476 → 482 → 490. Commits: `0c7f464` (R1), `ce42b61` (R2),
-`3a4a5d9` (R3). Alle CI/Deploy-runs groen.
-
-Productiecontrole: `/health`, een gewone `/ops/whoami` en `/ai-systems` geven 200; `/audit/verify`
-`valid` voor alle 5 organisaties. Een bewuste burst van 65 snelle `/ops/whoami`-aanroepen tegen de
-echte productie-API bevestigde het echte gedrag: 59× 200, daarna 429 — exact het verwachte patroon;
-na afkoeling werkte normaal gebruik meteen weer.
+- Rij 8 (A6) op `KLAAR` gezet.
+- Rij 5 (Batch M) teruggezet op `OPEN` — was tijdelijk op `WACHT` gezet op Dennis' verzoek zodat
+  A6 eerst kon lopen.
+- CLAUDE.md: nieuwe sectie-6-logregel voor deze sessie, HERVAT-BLOK bijgewerkt (volgende stap =
+  rij 5, Batch M), en twee verouderde alinea's rechtgezet die Batch O2 nog als "geblokkeerd"
+  en rij 2 (Batch H) nog als "volgende" beschreven — die batches waren al in een eerdere sessie
+  afgerond, alleen deze twee samenvattende alinea's waren niet meer bijgewerkt.
+- Beide bestanden gecommit (`9798f87`) en gepusht naar `origin/main`. Geen andere bestanden
+  gewijzigd of gestaged — `git status` vóór de commit bevestigde alleen `CLAUDE.md` en
+  `WERKLIJST.md` als gewijzigd, en de twee bekende, bewust nooit te committen untracked items
+  (`claude-code-handoff-reset-admin-passwords.md`, `Claude outputs/`) ongewijzigd daarbuiten.
 
 ## Niet gedaan / openstaand
 
-- **Batch M** (handout-generator), **Batch Q** (maandrapportage), **A6** (ISO CERT-video opnieuw):
-  hand-offs nog niet door Cowork geschreven, status `WACHT OP COWORK` — overgeslagen zoals de
-  werklijst voorschrijft.
-- **Batch P** (back-up/herstelproef) en serverhardening: `WACHT OP DENNIS` — hij moet eerst de
-  vereiste punten leveren.
-- `claude-code-handoff-reset-admin-passwords.md` blijft bewust ongetrackt op de Mac (zie boven).
-- De lokale dev-venv op de Mac staat nog op Python 3.9 — Batch R vroeg alleen om CI, niet de
-  lokale omgeving.
+- **Niets verzonden** — dat was expliciet niet gevraagd en is bewust niet gedaan. Dennis moet
+  zelf de video en de PDF volledig bekijken/lezen, ISO Cert International's eigen
+  accreditatieclaims apart verifiëren, en beslissen of en wanneer iets verstuurd wordt.
+- Een oud, los `.otp`-bestand in een eerdere-sessie-scratchpad (alleen-lezen-referentiemateriaal
+  voor deze taak) is aangetroffen maar niet geopend, aangeraakt of verwijderd — gemeld in
+  `QUALITY-REPORT-v2.md` als een mogelijk achtergebleven plaintext-wachtwoordrisico uit een
+  eerdere sessie, niet iets dat deze taak zelf veroorzaakte of oploste.
+- `claude-code-handoff-reset-admin-passwords.md` blijft bewust ongetrackt op de Mac (eerdere
+  Dennis-beslissing, ongewijzigd).
+- Batch M (rij 5), Batch Q (rij 6), Batch P (rij 7) en serverhardening (rij 10): niet
+  uitgevoerd deze sessie — M is nu de volgende `OPEN`-rij, de andere drie wachten op Cowork of
+  Dennis zoals de werklijst voorschrijft.
 
-Geen migraties buiten de expliciet goedgekeurde Batch O2-migratie, geen auth/MFA/ops-code geraakt
-(behalve de bewust toegevoegde rate-limit-check in `require_ops_access`, die geen gedrag van
-bestaande routes verandert), geen nieuwe organisaties buiten de expliciet goedgekeurde Atlas Demo
-B.V., geen berichten of e-mail verstuurd, geen classifier-blokkade omzeild, geen serverwijzigingen.
+Geen migraties, geen auth/MFA/ops-codewijzigingen, geen productcodewijzigingen van welke aard
+dan ook — A6 is uitsluitend contentproductie in een gitignored map.
