@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="{{ language }}">
+<head>
+<meta charset="utf-8">
+<title>Valqeron Client Handout — {{ tenant_name }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm;
+  }
+  @page :left { margin-left: 23mm; margin-right: 18mm; }
+  @page :right { margin-left: 18mm; margin-right: 23mm; }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: #FFFFFF;
+    color: #14181F;
+    font-family: 'Manrope', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    color: #14181F;
+    font-weight: 600;
+    break-after: avoid;
+  }
+  h1 { font-size: 24pt; margin: 0 0 10pt 0; }
+  h2 { font-size: 15pt; margin: 18pt 0 6pt 0; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 4pt 0; }
+
+  .eyebrow {
+    color: #8A6C1B; /* derived dark-gold text variant of the portal's real --gold (#c9a227),
+                        chosen for ~4.7:1 contrast on white — see report, Fase 0 correction */
+    font-size: 9pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4pt;
+  }
+
+  .rule {
+    border: none;
+    border-top: 1px solid #C9A227; /* the portal's actual gold, used for lines/accents */
+    margin: 10pt 0 14pt 0;
+  }
+
+  .note-box {
+    background: #F8F3E5; /* portal --gold-wash composited on white */
+    border: 1px solid #C9A227;
+    border-radius: 6pt;
+    padding: 8pt 12pt;
+    margin: 8pt 0;
+    font-size: 9.5pt;
+  }
+
+  .concept-stamp {
+    position: running(concept-stamp);
+  }
+
+  table.plain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8pt 0 12pt 0;
+    font-size: 9.5pt;
+  }
+  table.plain th {
+    background: #F8F3E5;
+    text-align: left;
+    padding: 5pt 8pt;
+    border: 1px solid #D9DCE1;
+    font-weight: 700;
+  }
+  table.plain td {
+    padding: 5pt 8pt;
+    border: 1px solid #D9DCE1;
+    vertical-align: top;
+  }
+
+  .screenshot-block {
+    break-inside: avoid;
+    margin: 10pt 0 14pt 0;
+  }
+  .screenshot-block img {
+    width: 100%;
+    border: 0.75pt solid #C9CDD3;
+    display: block;
+  }
+  .screenshot-caption {
+    font-size: 8.5pt;
+    color: #59606B;
+    margin-top: 4pt;
+  }
+
+  .module-section {
+    break-inside: avoid-page;
+    margin-bottom: 16pt;
+  }
+
+  .cover {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    page-break-after: always;
+  }
+  .cover .eyebrow { font-size: 11pt; }
+  .cover h1 { font-size: 30pt; margin-bottom: 4pt; }
+  .cover .meta {
+    margin-top: 24pt;
+    font-size: 10pt;
+    color: #59606B;
+    line-height: 1.8;
+  }
+  .cover .rule { width: 140pt; margin: 18pt auto; }
+  .cover .interface-note {
+    margin-top: 30pt;
+    font-size: 9pt;
+    color: #8A6C1B;
+    font-style: italic;
+  }
+  .concept-banner {
+    margin-top: 16pt;
+    display: inline-block;
+    padding: 6pt 14pt;
+    border: 1.5pt solid #8A6C1B;
+    border-radius: 999pt;
+    font-size: 9pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8A6C1B;
+  }
+
+  .toc-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 4pt 0;
+    border-bottom: 1px solid #D9DCE1;
+  }
+
+  .back-page {
+    page-break-before: always;
+  }
+
+  .footer-note {
+    font-size: 8pt;
+    color: #8f96a3;
+    margin-top: 24pt;
+  }
+
+  .fine-print {
+    font-size: 8.5pt;
+    color: #59606B;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <div class="eyebrow">VALQERON CLIENT HANDOUT</div>
+  <h1>{{ tenant_name }}</h1>
+  <hr class="rule">
+  <div class="meta">
+    {{ copy.tier_label }}: {{ tier_display }}<br>
+    {{ copy.date_label }}: {{ generated_date }}<br>
+    {{ copy.language_label }}: {{ language_display }}<br>
+    {{ copy.version_label }}: {{ template_version }} / {{ claude_md_sha }}
+  </div>
+  {% if language == 'nl' %}
+  <div class="interface-note">De schermafbeeldingen tonen de Engelstalige interface.</div>
+  {% endif %}
+  {% if concept_only %}
+  <div class="concept-banner">
+    {% if language == 'nl' %}CONCEPT — contactgegevens ontbreken{% else %}DRAFT — contact details missing{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<!-- WELCOME -->
+<section>
+  <div class="eyebrow">{{ copy.welcome_eyebrow }}</div>
+  <h1>{{ copy.welcome_title }}</h1>
+  <p>{{ shared.welcome }}</p>
+  <hr class="rule">
+
+  <h2>{{ copy.login_heading }}</h2>
+  <p>{{ shared.login }}</p>
+
+  <h2>{{ copy.change_password_heading }}</h2>
+  <p>{{ shared.change_password }}</p>
+
+  <h2>{{ copy.mfa_heading }}</h2>
+  <p>{{ shared.mfa }}</p>
+
+  <h2>{{ copy.tabs_heading }}</h2>
+  <table class="plain">
+    <thead><tr><th>{{ copy.tab_col }}</th><th>{{ copy.what_col }}</th></tr></thead>
+    <tbody>
+    {% for t in tabs %}
+      <tr><td><strong>{{ t.label }}</strong></td><td>{{ t.text }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ copy.progress_heading }}</h2>
+  <p>{{ shared.progress_card }}</p>
+
+  <h2>{{ copy.support_heading }}</h2>
+  <p>{{ shared.support }}</p>
+
+  <h2>{{ copy.expect_heading }}</h2>
+  <p>{{ shared.expect }}</p>
+
+  <div class="note-box">{{ shared.limits }}</div>
+</section>
+
+<!-- MODULES -->
+<section>
+  <div class="eyebrow">{{ copy.modules_eyebrow }}</div>
+  <h1>{{ copy.modules_title }}</h1>
+  <p>{{ module_intro }}</p>
+
+  {% for m in modules %}
+  <div class="module-section">
+    <h2>{{ m.name }}</h2>
+    {% if m.tier_note %}<div class="fine-print">{{ m.tier_note }}</div>{% endif %}
+    <p><strong>{{ copy.does_label }}:</strong> {{ m.does }}</p>
+    <p><strong>{{ copy.sees_label }}:</strong> {{ m.sees }}</p>
+    <p><strong>{{ copy.you_do_label }}:</strong> {{ m.you_do }}</p>
+    <p><strong>{{ copy.human_label }}:</strong> {{ m.human }}</p>
+    {% if m.extra_note %}<p>{{ m.extra_note }}</p>{% endif %}
+    <p><strong>{{ copy.not_yet_label }}:</strong> {{ m.not_yet }}</p>
+
+    {% if m.screenshots %}
+    {% for shot in m.screenshots %}
+    <div class="screenshot-block">
+      <img src="{{ shot.path }}" alt="{{ shot.caption }}">
+      <div class="screenshot-caption">{{ shot.caption }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<!-- BACK PAGE / CONTACT -->
+<section class="back-page">
+  <div class="eyebrow">{{ copy.contact_eyebrow }}</div>
+  <h1>{{ copy.contact_title }}</h1>
+  {% if concept_only %}
+  <div class="note-box">
+    {% if language == 'nl' %}CONCEPT, contactgegevens ontbreken{% else %}DRAFT, contact details missing{% endif %}
+  </div>
+  {% else %}
+  <p>{{ contact_text }}</p>
+  {% endif %}
+  <div class="footer-note">
+    Valqeron Client Handout &middot; {{ tenant_name }} &middot; {{ template_version }} / {{ claude_md_sha }}
+  </div>
+</section>
+
+</body>
+</html>

@@ -6,8 +6,11 @@ Four checks, all must pass before a PDF may be produced (see generate_handout.py
      ("always"/"never"/"every"/"altijd"/"nooit"/"elke") or a digit carries a claim ID, unless
      the block is explicitly marked allow_absolute (a negation, not an overclaim)
   3. completeness: the handout's module set matches the config's module list exactly
-  4. HR lock (hr_recruitment_ai only renders if confirmed) + contact gate (no contact.json or a
-     missing field means concept-only output)
+  4. HR lock: hr_recruitment_ai only renders if confirmed_blocks contains its key
+
+A separate, non-blocking contact gate (check_contact_gate / is_concept_only) decides whether
+the handout is stamped CONCEPT/DRAFT: a missing or incomplete contact.json never blocks the
+build (see run_all_checks's docstring) — per the hand-off, it only forces concept mode.
 
 Nothing here talks to the network, the database or the portal. Pure text/config validation.
 """
@@ -243,8 +246,11 @@ def check_hr_lock(selected_module_keys: Iterable[str], confirmed_blocks: Iterabl
 
 
 def check_contact_gate(contact_data: Optional[dict]) -> List[str]:
-    """Returns problems only when contact_data is present but incomplete (missing a required
-    field). A fully-missing contact.json is not a problem — the caller renders a concept."""
+    """Diagnostic only, not a blocking check (see run_all_checks): lists which required fields
+    are missing from an otherwise-present contact.json, for the generator to print as a warning.
+    Per the hand-off, a missing file or a missing field never blocks the build — it only forces
+    concept mode (is_concept_only handles that). Returns problems only when contact_data is
+    present but incomplete; a fully-missing contact.json returns no problems."""
     problems: List[str] = []
     if contact_data is None:
         return problems
@@ -273,7 +279,11 @@ def run_all_checks(
     contact_data: Optional[dict],
     catalog_module_keys: Optional[Iterable[str]] = None,
 ) -> List[str]:
-    """Runs all four blocking checks and returns every problem found (empty = clean)."""
+    """Runs the blocking checks (forbidden words, claim register, completeness, HR lock) and
+    returns every problem found (empty = clean). The contact gate is deliberately NOT included
+    here: per the hand-off, a missing or incomplete contact.json never blocks the build — it
+    only forces concept mode (see is_concept_only / check_contact_gate, which the caller uses
+    separately to decide the CONCEPT/DRAFT stamp and to print a diagnostic warning)."""
     problems: List[str] = []
 
     blocks = flatten_text_blocks(content["shared"], content["modules"])
@@ -283,6 +293,5 @@ def run_all_checks(
     if catalog_module_keys is not None:
         problems += check_modules_yaml_has_all_catalog_keys(content["modules"], catalog_module_keys)
     problems += check_hr_lock(selected_module_keys, confirmed_blocks)
-    problems += check_contact_gate(contact_data)
 
     return problems

@@ -1,0 +1,10 @@
+{
+  "name": "valqeron-handout-generator",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless-Chromium HTML-to-PDF rendering helper for scripts/generate_handout.py (Batch M). Not deployed; local/CLI use only.",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

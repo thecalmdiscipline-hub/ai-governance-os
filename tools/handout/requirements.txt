@@ -1,0 +1,7 @@
+# Dependencies for the handout generator (Batch M) only — never added to the production
+# requirements.txt. All four already happened to be present transitively in the repo venv (not
+# pinned there), so this file makes the dependency explicit rather than relying on that.
+Jinja2==3.1.6
+PyYAML==6.0.3
+PyMuPDF==1.26.5
+Pillow==11.3.0
