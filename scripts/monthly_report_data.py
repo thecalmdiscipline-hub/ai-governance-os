@@ -219,7 +219,7 @@ def collect(db, org_id: int, month: str) -> Dict[str, Any]:
     return {
         "organization": {"id": org.id, "name": org.name, "tier": org.tier},
         "period": {"month": month_label, "start": start.isoformat(), "end": end.isoformat()},
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "runs": {
             "total_this_month": runs_total_all,
             "total_unmatched_module": runs_total_unmatched,

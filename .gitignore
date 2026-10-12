@@ -38,5 +38,9 @@ demo-assets/
 # Per-tenant handout PDFs (Batch M) — generated output, never committed, never sent by Claude Code.
 handouts/
 
+# Per-tenant monthly report PDFs + source JSON (Batch Q) — generated output, never committed,
+# never sent by Claude Code (Dennis sends these himself).
+reports/
+
 # Node dependencies for tools/handout/render_pdf.mjs (not deployed, reinstalled via npm install).
 node_modules/
