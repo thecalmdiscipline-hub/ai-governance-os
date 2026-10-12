@@ -314,10 +314,20 @@ def main() -> int:
     parser.add_argument("--contact", type=Path, default=None)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--screenshots", type=Path, default=None)
+    parser.add_argument("--language", choices=["nl", "en"], default=None, help="Overrides the config's own language field, so one config can produce both PDFs.")
     args = parser.parse_args()
+    # Resolve to absolute paths up front: html_to_pdf() runs the Node renderer with its cwd set
+    # to tools/handout/ (so it finds its own node_modules), so a relative --out/--screenshots
+    # path given on this script's own (different) cwd must not be left relative, or the
+    # renderer would resolve it against the wrong directory and fail with ERR_FILE_NOT_FOUND.
+    args.out = args.out.resolve()
+    if args.screenshots:
+        args.screenshots = args.screenshots.resolve()
 
     with open(args.config, encoding="utf-8") as f:
         config = json.load(f)
+    if args.language:
+        config["language"] = args.language
 
     contact = None
     if args.contact and args.contact.exists():

@@ -1,0 +1,12 @@
+{
+  "tenant_name": "Starter Voorbeeld B.V.",
+  "tier": "starter",
+  "modules": [
+    "core",
+    "document_intelligence",
+    "customer_support_ai"
+  ],
+  "language": "nl",
+  "generated_for": "Example output for Batch M (M4) — not a real client.",
+  "confirmed_blocks": []
+}

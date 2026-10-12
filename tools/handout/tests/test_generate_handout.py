@@ -17,7 +17,7 @@ PYTHON = str(REPO_ROOT / "venv" / "bin" / "python3")
 SCRIPT = str(REPO_ROOT / "scripts" / "generate_handout.py")
 
 
-def _run(config: dict, tmp_path: Path, contact: dict = None, screenshots_dir: Path = None):
+def _run(config: dict, tmp_path: Path, contact: dict = None, screenshots_dir: Path = None, language: str = None):
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
     out_dir = tmp_path / "out"
@@ -31,6 +31,9 @@ def _run(config: dict, tmp_path: Path, contact: dict = None, screenshots_dir: Pa
 
     if screenshots_dir is not None:
         args += ["--screenshots", str(screenshots_dir)]
+
+    if language is not None:
+        args += ["--language", language]
 
     result = subprocess.run(args, cwd=REPO_ROOT, capture_output=True, text=True, timeout=60)
     return result, out_dir
@@ -224,3 +227,56 @@ def test_stale_screenshot_manifest_produces_a_warning_but_still_builds(tmp_path,
     # the build over this.
     if "ai-governance-frontend" in (result.stderr or ""):
         assert "stale" in result.stderr or "0000000" in result.stderr
+
+
+def test_language_flag_overrides_the_configs_own_language(tmp_path):
+    config = _base_config(language="nl")
+    result, out_dir = _run(config, tmp_path, language="en")
+    assert result.returncode == 0, result.stderr
+    pdfs = list(out_dir.glob("*_en_*.pdf"))
+    assert len(pdfs) == 1
+    doc = fitz.open(pdfs[0])
+    full_text = "\n".join(page.get_text() for page in doc)
+    assert "Welcome to Valqeron" in full_text
+    assert "Welkom bij Valqeron" not in full_text
+
+
+def test_atlas_demo_enterprise_example_config_is_valid(tmp_path):
+    repo_root = REPO_ROOT
+    config_path = repo_root / "tools" / "handout" / "examples" / "atlas-demo-enterprise.json"
+    out_dir = tmp_path / "out"
+    result = subprocess.run(
+        [PYTHON, SCRIPT, "--config", str(config_path), "--out", str(out_dir)],
+        cwd=repo_root, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert len(list(out_dir.glob("*.pdf"))) == 1
+
+
+def test_starter_example_config_is_valid(tmp_path):
+    repo_root = REPO_ROOT
+    config_path = repo_root / "tools" / "handout" / "examples" / "starter-example.json"
+    out_dir = tmp_path / "out"
+    result = subprocess.run(
+        [PYTHON, SCRIPT, "--config", str(config_path), "--out", str(out_dir)],
+        cwd=repo_root, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert len(list(out_dir.glob("*.pdf"))) == 1
+
+
+def test_relative_out_path_from_repo_root_still_works(tmp_path):
+    """Regression test: --out as a path relative to the CALLER's cwd (not tools/handout/, where
+    the Node PDF renderer runs with its own different cwd) must still resolve correctly."""
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(_base_config()), encoding="utf-8")
+
+    rel_out = "relative-out-dir"
+    result = subprocess.run(
+        [PYTHON, SCRIPT, "--config", str(config_path), "--out", rel_out],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    out_dir = tmp_path / rel_out
+    assert len(list(out_dir.glob("*.pdf"))) == 1
+    assert list(out_dir.glob("*.html")) == []

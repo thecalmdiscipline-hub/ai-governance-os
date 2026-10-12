@@ -1,0 +1,19 @@
+{
+  "tenant_name": "Atlas Demo B.V.",
+  "tier": "enterprise",
+  "modules": [
+    "core",
+    "document_intelligence",
+    "compliance_monitor",
+    "customer_support_ai",
+    "sales_qualification_ai",
+    "invoice_processing_ai",
+    "marketing_automation_ai",
+    "meeting_agenda_assistant",
+    "quote_contract_generator",
+    "business_intelligence"
+  ],
+  "language": "nl",
+  "generated_for": "Example output for Batch M (M4) — not a real client.",
+  "confirmed_blocks": []
+}
