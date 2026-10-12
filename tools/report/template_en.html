@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Valqeron Monthly Report — {{ tenant_name }}</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  @page :left { margin-left: 23mm; margin-right: 18mm; }
+  @page :right { margin-left: 18mm; margin-right: 23mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #FFFFFF; color: #14181F;
+    font-family: 'Manrope', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.45;
+  }
+  h1, h2, h3 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    color: #14181F; font-weight: 600; break-after: avoid;
+  }
+  h1 { font-size: 24pt; margin: 0 0 8pt 0; }
+  h2 { font-size: 15pt; margin: 16pt 0 6pt 0; }
+  h3 { font-size: 11.5pt; margin: 10pt 0 4pt 0; }
+  .eyebrow {
+    color: #8A6C1B; font-size: 9pt; letter-spacing: 0.08em;
+    text-transform: uppercase; margin-bottom: 4pt;
+  }
+  .rule { border: none; border-top: 1px solid #C9A227; margin: 8pt 0 12pt 0; }
+  .concept-banner {
+    display: inline-block; padding: 5pt 12pt; border: 1.5pt solid #8A6C1B;
+    border-radius: 999pt; font-size: 9pt; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #8A6C1B; margin-bottom: 10pt;
+  }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10pt; margin: 10pt 0 14pt 0; }
+  .kpi { border: 1px solid #D9DCE1; border-radius: 8pt; padding: 10pt; }
+  .kpi .label { font-size: 8.5pt; color: #59606B; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .value { font-size: 20pt; font-weight: 700; margin-top: 2pt; }
+  table.plain { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt 0; font-size: 9.5pt; }
+  table.plain th { background: #F8F3E5; text-align: left; padding: 5pt 8pt; border: 1px solid #D9DCE1; font-weight: 700; }
+  table.plain td { padding: 5pt 8pt; border: 1px solid #D9DCE1; vertical-align: top; }
+  .footnote { font-size: 8pt; color: #8f96a3; margin: 2pt 0 10pt 0; }
+  .status-valid { color: #2f7a3a; font-weight: 700; }
+  .status-invalid { color: #b42318; font-weight: 700; }
+  .appendix-break { page-break-before: always; }
+  .section { break-inside: avoid-page; margin-bottom: 10pt; }
+  .footer-note { font-size: 8pt; color: #8f96a3; margin-top: 6pt; }
+</style>
+</head>
+<body>
+
+<div class="eyebrow">VALQERON MONTHLY REPORT</div>
+<h1>{{ tenant_name }}</h1>
+<div style="color:#59606B; margin-bottom: 6pt;">
+  Period: {{ period_label }} &middot; Tier: {{ tier_display }} &middot; Generated: {{ generated_date }}
+</div>
+{% if concept_only %}
+<div class="concept-banner">DRAFT, contact details missing</div>
+{% endif %}
+<hr class="rule">
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">Runs this month</div><div class="value">{{ runs_total }}</div></div>
+  <div class="kpi"><div class="label">Open incidents</div><div class="value">{{ gov.open_incidents }}</div></div>
+  <div class="kpi"><div class="label">Open actions</div><div class="value">{{ gov.open_corrective_actions }}</div></div>
+  <div class="kpi"><div class="label">Audit integrity</div><div class="value {{ 'status-valid' if audit.chain_status == 'valid' else 'status-invalid' }}">{{ 'Valid' if audit.chain_status == 'valid' else 'Not valid' }}</div></div>
+</div>
+<div class="footnote">Source: runs register (count per module, this period); governance tables (current state); audit integrity check (as of generation date).</div>
+
+<h2>Summary</h2>
+<p>
+  In {{ period_label }}, a total of <strong>{{ runs_total }}</strong> workflow runs were recorded for
+  this environment's active modules.
+  {% if documents %}The environment holds <strong>{{ documents.total }}</strong> documents, of which
+  <strong>{{ documents.new_this_month }}</strong> are new this month.{% endif %}
+  <strong>{{ support.submitted_this_month }}</strong> support requests were submitted, of which
+  <strong>{{ support.done_of_those }}</strong> are now done. The governance register holds
+  <strong>{{ gov.ai_systems }}</strong> AI systems and <strong>{{ gov.ai_risks }}</strong> risks.
+</p>
+<div class="footnote">Source: runs register, document register, support requests register, governance tables — counts only, no content.</div>
+
+{% if next_steps %}
+<h2>Next steps</h2>
+<p>{{ next_steps }}</p>
+{% endif %}
+
+<div class="appendix-break"></div>
+<div class="eyebrow">APPENDIX</div>
+<h1>Detailed overview</h1>
+
+<div class="section">
+  <h2>Runs per module</h2>
+  <table class="plain">
+    <thead><tr><th>Module</th><th>Total</th><th>Succeeded</th><th>Failed</th></tr></thead>
+    <tbody>
+    {% for m in runs_per_module %}
+      <tr><td>{{ m.module_name }}</td><td>{{ m.total }}</td><td>{{ m.ok }}</td><td>{{ m.error }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="footnote">Source: runs register, count per active module, this period. "Failed" is a technical exception during the run; the anonymisation layer was always active — a request that would have bypassed it was refused.</div>
+</div>
+
+{% if documents %}
+<div class="section">
+  <h2>Documents</h2>
+  <p>{{ documents.total }} documents in total, {{ documents.new_this_month }} new this month.</p>
+  <div class="footnote">Source: document register, count.</div>
+</div>
+{% endif %}
+
+<div class="section">
+  <h2>Support requests</h2>
+  <p>{{ support.submitted_this_month }} submitted this month, {{ support.done_of_those }} done.</p>
+  <div class="footnote">Source: support requests register, count per status. Never subject or message text.</div>
+</div>
+
+<div class="section">
+  <h2>Governance</h2>
+  <table class="plain">
+    <tbody>
+      <tr><td>Open incidents</td><td>{{ gov.open_incidents }}</td></tr>
+      <tr><td>Open corrective actions</td><td>{{ gov.open_corrective_actions }}</td></tr>
+      <tr><td>Of which overdue</td><td>{{ gov.overdue_corrective_actions }}</td></tr>
+      <tr><td>AI systems on record</td><td>{{ gov.ai_systems }}</td></tr>
+      <tr><td>Risks on record</td><td>{{ gov.ai_risks }}</td></tr>
+    </tbody>
+  </table>
+  <div class="footnote">Source: governance tables (AI systems, risks, incidents, corrective actions), state as of generation date.</div>
+</div>
+
+<div class="section">
+  <h2>Audit log</h2>
+  <p>
+    {{ audit.actions_this_month }} recorded actions this month. Integrity as of generation date:
+    <span class="{{ 'status-valid' if audit.chain_status == 'valid' else 'status-invalid' }}">{{ 'valid' if audit.chain_status == 'valid' else 'not valid' }}</span>.
+  </p>
+  <div class="footnote">Source: audit log, count per period; integrity via the hash-chain check (/audit/verify).</div>
+</div>
+
+{% if onboarding %}
+<div class="section">
+  <h2>Onboarding</h2>
+  <table class="plain">
+    <thead><tr><th>Phase</th><th>Progress</th></tr></thead>
+    <tbody>
+    {% for p in onboarding.phases %}
+      <tr><td>{{ p.title }}</td><td>{{ p.done }}/{{ p.total }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="footnote">Source: onboarding project, customer-visible tasks only, while the project is in progress.</div>
+</div>
+{% endif %}
+
+{% if concept_only %}
+<div class="section">
+  <h2>Contact</h2>
+  <p>DRAFT, contact details missing.</p>
+  <div class="footer-note">Valqeron Monthly Report &middot; {{ tenant_name }} &middot; {{ period_label }}</div>
+</div>
+{% else %}
+<div class="section">
+  <h2>Contact</h2>
+  <p>{{ contact_text }}</p>
+  <div class="footer-note">Valqeron Monthly Report &middot; {{ tenant_name }} &middot; {{ period_label }}</div>
+</div>
+{% endif %}
+
+</body>
+</html>
