@@ -1,0 +1,290 @@
+# Per-module content blocks for the Valqeron client handout (NL/EN).
+#
+# Source: docs/handout/handout-inhoud-concept.md §2, filled in with the exact input/output
+# fields read from each app/workflows/implementations/*.py docstring in Fase 0 of Batch M
+# (nothing invented). `has_start_form` is a Fase-0 finding, not an assumption: only
+# `document_intelligence` has a form reachable from the portal's actual tab navigation
+# (DocumentsPage's "Ask your documents", wired into WorkflowDashboardPage.tsx). The other
+# nine modules' run-trigger code (runCustomerSupportWorkflow / runDocumentKnowledgeWorkflow
+# in src/services/workflows.ts) exists but is only called from RunsPage.tsx, which — like
+# AuditPage.tsx — is not wired into the tab list and is therefore unreachable in the live
+# portal. The renderer appends the "no start form yet" sentence for every module where
+# has_start_form is false, and the "no built-in approval step" sentence for every module.
+
+core:
+  claims: []
+  nl: >-
+    De Core is de centrale besturingsomgeving voor je klantomgeving. Producten, documenten en
+    resultaten blijven verbonden via één gestructureerde laag.
+  en: >-
+    The Core is the central control environment for your client workspace. Products, documents
+    and outcomes stay connected through one structured layer.
+
+modules:
+  - key: sales_qualification_ai
+    name: Sales Lead Qualification
+    has_start_form: false
+    does:
+      claims: []
+      allow_absolute: true
+      nl: >-
+        beoordeelt een binnengekomen lead aan de hand van de gegevens die je invoert en geeft een
+        score van 0 tot 100, een kwalificatie, sterke en zwakke punten en voorgestelde
+        vervolgacties.
+      en: >-
+        assesses an incoming lead from the details you enter and returns a score from 0 to 100, a
+        qualification, strengths and weaknesses, and suggested next actions.
+    sees:
+      nl: score, kwalificatie, samenvatting, sterke/zwakke punten, vervolgacties.
+      en: score, qualification, summary, strengths/weaknesses, next actions.
+    you_do:
+      nl: vul de leadgegevens in; kopieer de vervolgacties naar je eigen CRM.
+      en: enter the lead details; copy the next actions into your own CRM.
+    human:
+      claims: [C14]
+      nl: >-
+        een verkoper beoordeelt de score en de onderbouwing; de score is een hulpmiddel, geen
+        besluit.
+      en: a salesperson reviews the score and rationale; the score is an aid, not a decision.
+
+  - key: document_intelligence
+    name: Document Knowledge
+    has_start_form: true
+    does:
+      nl: beantwoordt vragen over documenten die je eigen organisatie heeft geüpload.
+      en: answers questions about documents your own organisation has uploaded.
+    sees:
+      nl: >-
+        antwoord met samenvatting en redenering, een betrouwbaarheidsniveau en de gebruikte
+        bronnen met fragmenten uit je eigen documenten.
+      en: >-
+        answer with summary and reasoning, a confidence level, and the sources used with
+        fragments from your own documents.
+    you_do:
+      nl: upload documenten op de tab Documents en stel een vraag.
+      en: upload documents on the Documents tab and ask a question.
+    human:
+      claims: []
+      allow_absolute: true
+      nl: controleer het antwoord altijd tegen de getoonde bronfragmenten.
+      en: always check the answer against the source fragments shown.
+    extra_note:
+      claims: [C17]
+      nl: elke medewerker van jullie organisatie kan de geüploade documenten via deze module raadplegen.
+      en: every member of your organisation can consult the uploaded documents through this module.
+
+  - key: invoice_processing_ai
+    name: Invoice Processing
+    has_start_form: false
+    does:
+      nl: >-
+        haalt gegevens uit factuurtekst (leverancier, nummer, datum, regels, bedragen, btw) en
+        meldt afwijkingen.
+      en: >-
+        extracts data from invoice text (vendor, number, date, lines, amounts, VAT) and reports
+        anomalies.
+    sees:
+      nl: gestructureerde factuurvelden, totalen, aantal regels, samenvatting en afwijkingen.
+      en: structured invoice fields, totals, line count, summary and anomalies.
+    you_do:
+      nl: plak de factuurtekst in.
+      en: paste in the invoice text.
+    human:
+      claims: [C14]
+      nl: >-
+        een medewerker controleert de bedragen en gegevens tegen de originele factuur vóór
+        boeking.
+      en: a team member checks the amounts and details against the original invoice before posting.
+
+  - key: compliance_monitor
+    name: Compliance Monitoring
+    has_start_form: false
+    does:
+      claims: []
+      allow_absolute: true
+      nl: >-
+        vergelijkt beleidstekst die je invoert met een gekozen kader en controlegebied en geeft
+        bevindingen, aanbevelingen, een score en een risiconiveau. Dit is geen continue bewaking
+        en geen certificering: het is een analyse van de tekst die je op dat moment invoert.
+      en: >-
+        compares policy text you enter against a chosen framework and control area and returns
+        findings, recommendations, a score and a risk level. This is not continuous monitoring
+        and not certification: it is an analysis of the text you enter at that moment.
+    sees:
+      nl: score, risiconiveau, bevindingen met verwijzing naar het kader, aanbevelingen.
+      en: score, risk level, findings with a reference to the framework, recommendations.
+    you_do:
+      nl: kies kader en controlegebied, plak de beleidstekst, vul bekende bevindingen in.
+      en: choose a framework and control area, paste the policy text, enter known findings.
+    human:
+      claims: [C14]
+      nl: >-
+        een compliance-verantwoordelijke beoordeelt elke bevinding; het resultaat is geen oordeel
+        van een auditor.
+      en: a compliance officer reviews every finding; the result is not an auditor's judgement.
+    tier_note:
+      nl: "Tier: verplicht bij Business en Enterprise."
+      en: "Tier: required for Business and Enterprise."
+
+  - key: customer_support_ai
+    name: Customer Support
+    has_start_form: false
+    does:
+      nl: >-
+        beoordeelt een klantvraag en stelt een prioriteit, een reden voor de urgentie, een
+        voorgestelde actie en een samenvatting voor.
+      en: >-
+        assesses a customer question and proposes a priority, a reason for the urgency, a
+        suggested action and a summary.
+    sees:
+      nl: prioriteit, reden voor de urgentie, voorgestelde actie, samenvatting.
+      en: priority, reason for the urgency, suggested action, summary.
+    you_do:
+      nl: vul naam, product en de vraag in.
+      en: enter name, product and the question.
+    human:
+      claims: []
+      nl: >-
+        een medewerker beslist over de actie en antwoordt zelf aan de klant; het resultaat is
+        geen kant-en-klaar antwoord.
+      en: >-
+        a team member decides on the action and replies to the customer directly; the result is
+        not a ready-to-send reply.
+
+  - key: hr_recruitment_ai
+    name: HR Recruitment
+    has_start_form: false
+    requires_confirmation: true
+    does:
+      nl: >-
+        vat kandidaatgegevens samen en stelt sterke punten, aandachtspunten, vragen voor het
+        gesprek, een score en een aanbeveling voor.
+      en: >-
+        summarises candidate details and proposes strengths, concerns, interview questions, a
+        score and a recommendation.
+    sees:
+      nl: sterke punten, aandachtspunten, gespreksvragen, score, aanbeveling, samenvatting.
+      en: strengths, concerns, interview questions, score, recommendation, summary.
+    you_do:
+      nl: vul kandidaatgegevens, cv, motivatie en eventuele notities in.
+      en: enter candidate details, CV, motivation and any notes.
+    human:
+      claims: []
+      allow_absolute: true
+      nl: >-
+        elke beslissing over een kandidaat neemt een mens; de score en aanbeveling mogen nooit de
+        beslissing zijn. Werving valt onder de EU AI Act als hoogrisicogebied en bevat bijzonder
+        gevoelige persoonsgegevens; de klant is zelf verantwoordelijk voor een rechtmatige inzet.
+      en: >-
+        every decision about a candidate is taken by a person; the score and recommendation must
+        never be the decision. Recruitment is a high-risk area under the EU AI Act and involves
+        sensitive personal data; the customer is responsible for a lawful use.
+
+  - key: marketing_automation_ai
+    name: Marketing Automation
+    has_start_form: false
+    does:
+      nl: >-
+        maakt een campagnevoorstel op basis van doelgroep, product, doelen, budget en huidige
+        kanalen: acties, strategie, boodschappen, timing en een indicatieve
+        rendementsschatting.
+      en: >-
+        produces a campaign proposal from audience, product, goals, budget and current channels:
+        actions, strategy, messaging, timing and an indicative return estimate.
+    sees:
+      nl: acties, strategie (boodschappen, kanalen), timing, indicatieve rendementsschatting.
+      en: actions, strategy (messaging, channels), timing, indicative return estimate.
+    you_do:
+      nl: vul doelgroep, product, doelen, budget, sector en huidige kanalen in.
+      en: enter audience, product, goals, budget, industry and current channels.
+    human:
+      claims: []
+      nl: >-
+        de rendementsschatting is een indicatie van een taalmodel en geen voorspelling; marketing
+        beoordeelt alle teksten en aannames.
+      en: >-
+        the return estimate is an indication from a language model and not a forecast; marketing
+        reviews all texts and assumptions.
+
+  - key: meeting_agenda_assistant
+    name: Meeting Agenda Assistant
+    has_start_form: false
+    does:
+      nl: >-
+        stelt een agenda voor met tijdsduur, gewenste uitkomst per punt, voorbereidingstips per
+        deelnemer, beslispunten en een actielijst-sjabloon.
+      en: >-
+        proposes an agenda with duration, desired outcome per item, preparation tips per
+        participant, decision points and an action-list template.
+    sees:
+      nl: agenda-items met tijdsduur en gewenste uitkomst, voorbereidingstips, beslispunten, actielijst-sjabloon.
+      en: agenda items with duration and desired outcome, preparation tips, decision points, action-list template.
+    you_do:
+      nl: vul titel, deelnemers, doelen, type overleg en context in.
+      en: enter title, participants, goals, meeting type and context.
+    human:
+      claims: []
+      nl: de organisator past de agenda aan voordat deze wordt verstuurd.
+      en: the organiser adjusts the agenda before it is sent out.
+    extra_note:
+      claims: []
+      nl: deelnemersnamen in de invoer worden als persoonsgegevens behandeld.
+      en: participant names in the input are treated as personal data.
+
+  - key: quote_contract_generator
+    name: Quote & Contract Generator
+    has_start_form: false
+    does:
+      claims: [C15]
+      nl: >-
+        maakt een concept van een offerte en contracttekst in het Nederlands of het Engels
+        (instelbaar met output_language).
+      en: >-
+        produces a draft quote and contract text in Dutch or English (selectable with
+        output_language).
+    sees:
+      nl: >-
+        offerte- en contractnummer, offertetekst en scope-omschrijving, contractvoorwaarden,
+        regelitems met een professionele omschrijving en totalen (subtotaal, btw, eindtotaal),
+        een betalings- en een geldigheidsnotitie, en eventuele bijzondere voorwaarden.
+      en: >-
+        quote and contract number, quote text and scope description, contract terms, line items
+        with a professional description and totals (subtotal, VAT, final total), a payment note
+        and a validity note, and any special conditions.
+    you_do:
+      nl: >-
+        vul klantgegevens, regelitems, valuta en btw-tarief in, een projectomschrijving of scope,
+        en kies de taal.
+      en: >-
+        enter customer details, line items, currency and VAT rate, a project description or
+        scope, and choose the language.
+    human:
+      claims: []
+      allow_absolute: true
+      nl: >-
+        de uitkomst is een concept; een jurist en de verantwoordelijke tekenen na lezing, Valqeron
+        geeft geen juridisch advies.
+      en: >-
+        the output is a draft; a lawyer and the responsible person review it before signing;
+        Valqeron does not give legal advice.
+
+  - key: business_intelligence
+    name: Business Intelligence
+    has_start_form: false
+    does:
+      nl: >-
+        beantwoordt een zakelijke vraag met een samenvatting, KPI's, aanbevelingen, actiepunten
+        en risico's, op basis van de context die je invoert.
+      en: >-
+        answers a business question with a summary, KPIs, recommendations, action items and
+        risks, based on the context you enter.
+    sees:
+      nl: samenvatting, KPI's, aanbevelingen, actiepunten, risico's, prioriteitsniveau.
+      en: summary, KPIs, recommendations, action items, risks, priority level.
+    you_do:
+      nl: vul je zakelijke vraag, context, periode en bedrijfsgrootte in.
+      en: enter your business question, context, time period and company size.
+    human:
+      claims: []
+      nl: cijfers in het resultaat zijn afgeleid van de ingevoerde context; een analist controleert ze tegen de bron.
+      en: figures in the result are derived from the context you entered; an analyst checks them against the source.

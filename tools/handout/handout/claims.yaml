@@ -1,0 +1,63 @@
+# Claim register for the Valqeron client handout.
+#
+# Source: docs/handout/handout-inhoud-concept.md §3 (C1–C16, Cowork). Evidence refined in Fase 0
+# of Batch M to the exact file/section backing each claim, read directly from the code — not
+# copied from the concept's "to be refined" placeholder text.
+#
+# Rule (checks.py enforces this): every claim ID referenced from shared.yaml/modules.yaml must
+# exist here with non-empty evidence; every sentence containing "always/never/every/altijd/
+# nooit/elke" or a digit must either carry a claim ID or be marked `allow_absolute: true` with a
+# reason (a negation, not an overclaim).
+
+claims:
+  C1:
+    text: "Eigen organisatie wordt altijd uit het token gehaald; andere organisaties zijn niet bereikbaar"
+    evidence: "app/api/dependencies.py (get_current_user scopes every query to current_user.organization_id); CLAUDE.md §2 Batch L/O isolation checks"
+  C2:
+    text: "Audit-log is hash-gekoppeld en wijzigen/verwijderen is geblokkeerd"
+    evidence: "app/models/audit_log.py:43-48 (SQLAlchemy events block UPDATE/DELETE); CLAUDE.md §2 'Audit trail'"
+  C3:
+    text: "Auditintegriteit is controleerbaar (/audit/verify)"
+    evidence: "app/api/governance.py GET /audit/verify; CLAUDE.md §2/§6 Batch A (hash-chain verification, epoch marker design)"
+  C4:
+    text: "PII wordt vervangen vóór het model en teruggezet in de uitvoer, voor alle 10 workflows"
+    evidence: "app/core/pii_anonymizer.py (anonymize_text_with_mapping / restore_placeholders); tests/workflows/test_pii_anonymizer_wiring.py + tests/workflows/test_pii_restore_wiring.py"
+  C5:
+    text: "Als de anonimisering niet beschikbaar is, gaat het verzoek niet naar het model (fail-closed)"
+    evidence: "app/core/pii_anonymizer.py PIIAnonymizerUnavailable, caught in every workflow's run() before the OpenAI call; tests/test_pii_warmup.py"
+  C6:
+    text: "Herkenning van persoonsgegevens is niet perfect"
+    evidence: "CLAUDE.md §5 (known over-redaction of common words as PERSON, documented and intentionally left as the safe-side error)"
+  C7:
+    text: "Eerste inlog vraagt een nieuw wachtwoord van minstens 12 tekens"
+    evidence: "app/api/auth.py change-password validation (>=12 chars); must_change_password gate in app/api/dependencies.py; CLAUDE.md §2 'Auth'"
+  C8:
+    text: "MFA is optioneel (TOTP), 10 back-upcodes, 5 foute codes = 15 minuten blokkade"
+    evidence: "app/core/mfa.py; app/api/mfa.py; CLAUDE.md §2 'Auth' (Batch E)"
+  C9:
+    text: "Supportverzoek: categorieën, limieten 200/5000 tekens, 5 per uur, 20 per dag, SR-referentie, 'My requests'"
+    evidence: "app/api/support_requests.py (POST /support-requests validation + rate limiting); CLAUDE.md §2 Batch G"
+  C10:
+    text: "Onboarding-voortgangskaart toont alleen klantzichtbare taken; klant kan alleen eigen taken afvinken"
+    evidence: "app/api/onboarding.py GET /onboarding/progress (customer_visible filter) and PATCH /onboarding/tasks/{id} (owner == 'customer' filter); CLAUDE.md §2 Batch L Deel A + correctie"
+  C11:
+    text: "Governance-tab: overzicht plus aanmaken/bijwerken van risico's en bewijsstukken; aanmaken en statuswijziging van incidenten en corrigerende maatregelen"
+    evidence: "app/api/governance.py (POST/PATCH /ai-risks, /evidence; POST/PATCH /ai-incidents; PUT /corrective-actions/{id}/status); ai-governance-frontend src/pages/GovernancePage.tsx (RiskRow/EvidenceRow have an edit form, IncidentRow/CorrectiveActionRow only a status select) — Fase 0 of Batch M read the frontend component directly to confirm this distinction"
+  C12:
+    text: "Tierregels (Starter >=2, Business >=5 incl. Compliance Monitor, Enterprise >=7 incl. Compliance Monitor)"
+    evidence: "app/services/tenant_modules.py (MIN_WORKFLOWS, REQUIRED_WORKFLOWS)"
+  C13:
+    text: "Foutmeldingen gaan zonder persoonsgegevens naar een foutmeldingsdienst (Sentry, EU)"
+    evidence: "app/core/observability.py before_send (strips user/extra/breadcrumbs/request body, masks email/digit sequences); CLAUDE.md §2 'Foutmelding (Sentry)'"
+  C14:
+    text: "Er is geen goedkeuringsstap in het portaal"
+    evidence: "Confirmed by reading app/api/governance.py and ai-governance-frontend/src/pages/GovernancePage.tsx — no 'pending review'/'requires approval' status or endpoint exists anywhere in the governance or workflow-run code"
+  C15:
+    text: "Quote & Contract Generator ondersteunt nl en en"
+    evidence: "app/workflows/implementations/quote_contract_generator.py (resolve_output_language, SUPPORTED_OUTPUT_LANGUAGES); tests/workflows/test_quote_contract_generator_output_language.py"
+  C16:
+    text: "Bewijsstukken zijn beschrijvingen (metadata), geen bestanden"
+    evidence: "app/models/evidence.py (title/description/file_reference are all text columns, no file/upload column exists); app/api/governance.py POST/PATCH /evidence"
+  C17:
+    text: "Elke medewerker van de eigen organisatie kan geüploade documenten raadplegen via Document Knowledge"
+    evidence: "app/api/documents.py GET /documents and /{document_id} (scoped by organization_id only, no uploaded_by_user_id filter); app/workflows/implementations/document_knowledge.py docstring, confirmed during Batch J"

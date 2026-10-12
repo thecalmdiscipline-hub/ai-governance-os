@@ -34,3 +34,6 @@ uploaded_documents/
 
 # Demo collateral (screenshots, clips, audio, PDF, video) — large binaries, never committed.
 demo-assets/
+
+# Per-tenant handout PDFs (Batch M) — generated output, never committed, never sent by Claude Code.
+handouts/
