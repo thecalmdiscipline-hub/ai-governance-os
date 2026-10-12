@@ -110,6 +110,43 @@ def tenant_slug(tenant_name: str) -> str:
     return slug or "tenant"
 
 
+def frontend_head_sha(frontend_repo: Path = Path.home() / "ai-governance-frontend") -> Optional[str]:
+    """The ai-governance-frontend repo's current HEAD, used as a freshness reference for
+    screenshot manifests. CD auto-deploys every green push to main, so local HEAD is the best
+    available proxy for 'what is live' without a network call. Returns None if that repo isn't
+    checked out on this machine (the freshness check is then skipped, not failed)."""
+    if not frontend_repo.is_dir():
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%h"],
+            cwd=frontend_repo, capture_output=True, text=True, check=True,
+        )
+        return out.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def check_screenshot_freshness(screenshots_dir: Optional[Path]) -> List[str]:
+    """Non-blocking: warns if the screenshot manifest's frontend_build_sha predates the local
+    ai-governance-frontend repo's current HEAD (per the hand-off: warn, never break silently)."""
+    if not screenshots_dir:
+        return []
+    manifest_path = screenshots_dir / "manifest.json"
+    if not manifest_path.exists():
+        return []
+    with open(manifest_path, encoding="utf-8") as f:
+        raw = json.load(f)
+    manifest_sha = raw.get("_meta", {}).get("frontend_build_sha")
+    current_sha = frontend_head_sha()
+    if manifest_sha and current_sha and manifest_sha != current_sha:
+        return [
+            f"screenshots were captured at frontend commit {manifest_sha}, but "
+            f"ai-governance-frontend's current HEAD is {current_sha} — screens may be stale"
+        ]
+    return []
+
+
 def claude_md_sha() -> str:
     try:
         out = subprocess.run(
@@ -131,13 +168,26 @@ def build_not_yet(has_start_form: bool, language: str) -> str:
 
 
 def load_screenshots_manifest(screenshots_dir: Optional[Path]) -> dict:
+    """Loads manifest.json and resolves every shot's `path` to an absolute file:// URI, so the
+    <img> tag works regardless of where the intermediate HTML file ends up relative to the
+    screenshots directory (Chromium's file:// scheme does not require same-directory images)."""
     if not screenshots_dir:
         return {}
     manifest_path = screenshots_dir / "manifest.json"
     if not manifest_path.exists():
         return {}
     with open(manifest_path, encoding="utf-8") as f:
-        return json.load(f)
+        raw = json.load(f)
+
+    resolved = {}
+    for key, shots in raw.items():
+        if key == "_meta":
+            continue
+        resolved[key] = [
+            {**shot, "path": (screenshots_dir / shot["path"]).resolve().as_uri()}
+            for shot in shots
+        ]
+    return resolved
 
 
 def resolve_modules(config_modules: List[str], modules_yaml: dict, language: str, screenshots: dict) -> List[dict]:
@@ -213,6 +263,9 @@ def build_context(config: dict, contact: Optional[dict], content: dict, screensh
     modules = resolve_modules(config["modules"], modules_yaml, language, screenshots)
     tabs = resolve_tabs(shared_yaml, language)
 
+    tab_order = ["home", "core", "products", "results", "documents", "governance", "account"]
+    tab_screenshots = [shot for key in tab_order for shot in screenshots.get(key, [])]
+
     module_intro = modules_yaml.get("core", {}).get(language, "")
 
     return {
@@ -226,6 +279,7 @@ def build_context(config: dict, contact: Optional[dict], content: dict, screensh
         "claude_md_sha": claude_md_sha(),
         "shared": shared_text,
         "tabs": tabs,
+        "tab_screenshots": tab_screenshots,
         "modules": modules,
         "module_intro": module_intro,
         "concept_only": concept_only,
@@ -291,6 +345,9 @@ def main() -> int:
     contact_warnings = check_contact_gate(contact)
     for w in contact_warnings:
         print(f"WARNING: {w} — rendering as a concept", file=sys.stderr)
+
+    for w in check_screenshot_freshness(args.screenshots):
+        print(f"WARNING: {w}", file=sys.stderr)
 
     context = build_context(config, contact, content, args.screenshots)
     html = render_html(context)

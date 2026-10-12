@@ -211,6 +211,15 @@
     </tbody>
   </table>
 
+  {% if tab_screenshots %}
+  {% for shot in tab_screenshots %}
+  <div class="screenshot-block">
+    <img src="{{ shot.path }}" alt="{{ shot.caption }}">
+    <div class="screenshot-caption">{{ shot.caption }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
   <h2>{{ copy.progress_heading }}</h2>
   <p>{{ shared.progress_card }}</p>
 

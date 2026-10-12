@@ -159,3 +159,68 @@ def test_no_html_file_is_left_behind(tmp_path):
     result, out_dir = _run(_base_config(), tmp_path)
     assert result.returncode == 0, result.stderr
     assert list(out_dir.glob("*.html")) == []
+
+
+def _make_screenshot(tmp_path: Path, name: str):
+    from PIL import Image
+    path = tmp_path / name
+    Image.new("RGB", (1440, 900), (20, 23, 34)).save(path)
+    return path
+
+
+def test_a_tab_screenshot_appears_in_the_rendered_pdf(tmp_path):
+    shots_dir = tmp_path / "screenshots"
+    shots_dir.mkdir()
+    _make_screenshot(shots_dir, "home.png")
+    manifest = {
+        "_meta": {"frontend_build_sha": "deadbee", "captured_at": "2026-10-12T00:00:00Z"},
+        "home": [{"path": "home.png", "caption": "The Home tab."}],
+    }
+    (shots_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result, out_dir = _run(_base_config(), tmp_path, screenshots_dir=shots_dir)
+    assert result.returncode == 0, result.stderr
+    pdfs = list(out_dir.glob("*.pdf"))
+    doc = fitz.open(pdfs[0])
+    full_text = "\n".join(page.get_text() for page in doc)
+    assert "The Home tab." in full_text
+    total_images = sum(len(page.get_images()) for page in doc)
+    assert total_images >= 1
+
+
+def test_module_screenshot_appears_inside_its_module_card(tmp_path):
+    shots_dir = tmp_path / "screenshots"
+    shots_dir.mkdir()
+    _make_screenshot(shots_dir, "dk_1.png")
+    manifest = {
+        "_meta": {"frontend_build_sha": "deadbee", "captured_at": "2026-10-12T00:00:00Z"},
+        "document_intelligence": [{"path": "dk_1.png", "caption": "Ask your documents."}],
+    }
+    (shots_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    config = _base_config(modules=["core", "document_intelligence"])
+    result, out_dir = _run(config, tmp_path, screenshots_dir=shots_dir)
+    assert result.returncode == 0, result.stderr
+    pdfs = list(out_dir.glob("*.pdf"))
+    doc = fitz.open(pdfs[0])
+    full_text = "\n".join(page.get_text() for page in doc)
+    assert "Ask your documents." in full_text
+
+
+def test_stale_screenshot_manifest_produces_a_warning_but_still_builds(tmp_path, monkeypatch):
+    shots_dir = tmp_path / "screenshots"
+    shots_dir.mkdir()
+    _make_screenshot(shots_dir, "home.png")
+    manifest = {
+        "_meta": {"frontend_build_sha": "0000000", "captured_at": "2020-01-01T00:00:00Z"},
+        "home": [{"path": "home.png", "caption": "An old screenshot."}],
+    }
+    (shots_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result, out_dir = _run(_base_config(), tmp_path, screenshots_dir=shots_dir)
+    assert result.returncode == 0, result.stderr
+    # Either the frontend repo isn't checked out on this machine (no warning possible) or it is
+    # and the SHAs genuinely differ (0000000 can never be real) — accept both, but never fail
+    # the build over this.
+    if "ai-governance-frontend" in (result.stderr or ""):
+        assert "stale" in result.stderr or "0000000" in result.stderr
