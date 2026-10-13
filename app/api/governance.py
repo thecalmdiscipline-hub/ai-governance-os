@@ -291,6 +291,21 @@ def create_ai_system(
     db.add(db_system)
     db.commit()
     db.refresh(db_system)
+
+    # Added Batch S (2026-10-12): this endpoint never wrote an audit entry. details follows the
+    # newer, privacy-conscious pattern used by incident/corrective-action/evidence creation below
+    # (just "<Entity> created") rather than the older "archived"/"deploy" entries in this same file
+    # that embed the system name — no free text or personal data.
+    create_audit_log(
+        db=db,
+        organization_id=int(current_user.organization_id),
+        entity_type="ai_system",
+        entity_id=int(db_system.id),
+        action="created",
+        details="AISystem created",
+        performed_by=current_user.username,
+    )
+
     return db_system
 
 
@@ -558,6 +573,19 @@ def create_ai_risk(
     db.add(db_risk)
     db.commit()
     db.refresh(db_risk)
+
+    # Added Batch S (2026-10-12): this endpoint never wrote an audit entry. No title/description/
+    # mitigation text, matching the existing "risk_updated" PATCH below.
+    create_audit_log(
+        db=db,
+        organization_id=system.organization_id,
+        entity_type="ai_risk",
+        entity_id=db_risk.id,
+        action="created",
+        details="AIRisk created",
+        performed_by=current_user.username,
+    )
+
     return db_risk
 
 
@@ -630,8 +658,22 @@ def delete_ai_risk(
             detail="High-risk records are immutable. Super-admin required.",
         )
 
+    organization_id = risk.ai_system.organization_id
     risk.is_deleted = True
     db.commit()
+
+    # Added Batch S (2026-10-12): this endpoint never wrote an audit entry. No title/description/
+    # mitigation text, matching the existing "risk_updated" PATCH above.
+    create_audit_log(
+        db=db,
+        organization_id=organization_id,
+        entity_type="ai_risk",
+        entity_id=risk.id,
+        action="deleted",
+        details="AIRisk soft-deleted",
+        performed_by=current_user.username,
+    )
+
     return {"message": "Risk deleted"}
 
 
@@ -830,6 +872,17 @@ def approve_production(
     db.add(approval)
     db.commit()
     db.refresh(approval)
+
+    # Added Batch S (2026-10-12): this endpoint never wrote an audit entry.
+    create_audit_log(
+        db=db,
+        organization_id=system.organization_id,
+        entity_type="production_approval",
+        entity_id=approval.id,
+        action="created",
+        details="ProductionApproval created",
+        performed_by=current_user.username,
+    )
 
     return {
         "system_id": system.id,
