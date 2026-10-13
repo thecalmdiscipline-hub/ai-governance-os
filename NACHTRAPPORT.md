@@ -1,116 +1,110 @@
-# Rapport — 2026-10-12 (Claude Code, A6: ISO Cert International-prospectvideo opnieuw)
+# Rapport — 2026-10-13 (Claude Code: serverhardening S1+S2, gevolgd door Batch Q/S-afronding)
 
-Opdracht van Dennis: "Lees WERKLIJST.md en het HERVAT-BLOK in CLAUDE.md. Op last van Dennis
-(8 okt): voer rij 8 (A6, ISO CERT-video opnieuw) nu uit, vóór rij 5 (Batch M). Zet in
-WERKLIJST.md rij 5 daarvoor op wachten en zet de volgorde terug als rij 8 KLAAR is. Volg de
-stopregels uit de hand-off, commit en push niets dat geheimen bevat, verzend niets en schrijf
-aan het eind NACHTRAPPORT.md." Dit document bevat geen geheimen of persoonsgegevens.
+Opdracht van Dennis: "Voer `claude-code-handoff-serverhardening.md` uit (repo-root, eerst
+`git pull`). `SNAPSHOT=ja`, snapshot gemaakt om 08:36. Ik blijf beschikbaar met een tweede
+terminal en het DigitalOcean-paneel open. Mijn IP voor `ignoreip` (alleen lokaal, niet in git):
+77.250.175.102. Publieke deploysleutel voor S3: nog niet. Eén sessie. Geen geheimen in bestanden
+of chat, classifier-blokkades niet omzeilen, stop bij elke stopvoorwaarde, werk het HERVAT-BLOK
+na elke stap bij." Dit document bevat geen geheimen, IP-lijsten of persoonsgegevens.
 
-**Resultaat in één zin:** A6 (rij 8) is volledig af — een nieuwe prospectvideo (4:37,9 min) en
-PDF (17 pagina's) voor ISO Cert International, die alle negen eerder gemiste prospectpunten
-direct beantwoordt met alleen bestaande productcapaciteiten, staan lokaal klaar maar zijn
-**niet verzonden**; WERKLIJST.md rij 8 staat op `KLAAR`, rij 5 (Batch M) is teruggezet op
-`OPEN` en is nu de volgende uitvoerbare rij.
+**Resultaat in één zin:** S1 (fail2ban + sshd-aanscherping) en S2 (kernel-update + één herstart)
+zijn volledig af en dubbel bewezen op productie; S3 (beperkte frontend-deploygebruiker) is
+bewust overgeslagen omdat Dennis nog geen publieke sleutel leverde; `WERKLIJST.md` rij 10 staat
+op `KLAAR` en rij 12 (Batch T, auditregels voor `app/api/users.py`) is nu de volgende
+uitvoerbare rij.
 
 ---
 
 ## Wat is er gebeurd
 
-Dennis had de vorige (2026-10-05) prospectvideo beoordeeld met 7,5/10 voor beeld maar 5/10 voor
-relevantie: negen specifieke punten die een certificatie-instelling (het fictieve ISO Cert
-International-scenario) had opgeworpen, misten een directe, concrete beantwoording. De hand-off
-`claude-code-handoff-a6-iso-cert-video-opnieuw.md` koppelt elk van de negen punten aan wat het
-product daadwerkelijk doet, de aanpak voor de video, en een vooraf goedgekeurde zin — met de
-harde regel: nooit overclaimen, twee ontbrekende capaciteiten (een los audit-rapport, een
-ingebouwde goedkeuringsstap) eerlijk als "on the roadmap" tonen in plaats van verzinnen.
+**Fase 0 (alleen lezen) — twee afwijkingen van de aanname in de hand-off, geen stopreden:**
+(1) de kernel-metapakketten uit de hand-off waren **al geïnstalleerd** (`6.8.0-146-generic`
+stond al als `ii` in `dpkg -l`, alleen de herstart was nog niet gedaan); (2) alleen
+`/etc/ssh/sshd_config.d/50-cloud-init.conf` zet `PasswordAuthentication yes`, en omdat OpenSSH
+"eerste match wint" toepast over alfabetisch geglobde `sshd_config.d/*.conf`-bestanden, zou een
+naïef `99-valqeron-hardening.conf` nooit effect hebben gehad — de nieuwe drop-in is daarom
+`10-valqeron-hardening.conf` genoemd (sorteert vóór `50-`), bevestigd met `sshd -T` vóór en na.
 
-**Fase 0:** de meeste workflows hebben geen portaalformulier om een run te starten — alleen
-Document Knowledge heeft dat. Hergebruikt: hetzelfde hybride patroon uit de 2026-10-05-productie
-— runs starten via directe, echte API-calls tegen organisatie 4, en daarna een echte
-portaalscreenshot van dat resultaat via de Results-tab. Elke screenshot in de video/PDF is dus
-óf een echt, live portaalscherm, óf een duidelijk gelabeld, uit echte data opgebouwd technisch
-overzicht — nooit een verzonnen productscherm. Nieuwe bevinding: `AuditPage.tsx` bestaat wel in
-de frontendcode maar heeft geen navigatie-ingang — een klant ziet dit scherm nooit. Punt 9's
-audit-logbewijs is daarom getoond als een directe, expliciet gelabelde `/audit/verify`-API-
-respons (als technische terminal-output), niet als een niet-bestaand portaalscherm.
+**S1 — fail2ban + sshd:** `fail2ban` geïnstalleerd (jail `sshd`: `maxretry=5`, `findtime=10m`,
+`bantime=1h`; jail `recidive`: `bantime=7d` na 3 bans binnen 1 dag; `ignoreip` bevat Dennis' IP,
+alleen lokaal in `/etc/fail2ban/jail.d/valqeron.local`, nooit in git). Na ≥10 minuten: 30
+mislukte pogingen, 3 IP's verbannen (alleen aantallen gerapporteerd, geen IP-lijst). **Dubbele
+live bewijsstap met Dennis**, letterlijk gevolgd: hij opende een eerste nieuwe sleutel-sessie
+vóór enige wijziging ("Nieuwe SSH-sessie met sleutel werkt"), toen is de sshd-drop-in geschreven
+(`PermitRootLogin prohibit-password`, `PasswordAuthentication no`, `KbdInteractiveAuthentication
+no`, `PermitEmptyPasswords no`, `MaxAuthTries 3`, `LoginGraceTime 30`, `MaxStartups 30:30:100`,
+`X11Forwarding no`), een config-back-up weggeschreven naar `/root/sshd-config-backup-20261013/`,
+`sshd -t`/`sshd -T` gecontroleerd, `systemctl reload ssh` (geen restart), en pas daarna opende
+Dennis een tweede nieuwe sessie na de reload ("derde sessie werkt") — pas toen is de wijziging
+als bewezen beschouwd. Twee `workflow_dispatch`-Deploys (backend + frontend) slaagden daarna
+zonder door `fail2ban` verbannen te worden.
 
-**Runs en screenshots:** 13 echte workflow-runs via API + 1 echte run via de portaal-UI (Ask
-your documents) op organisatie 4, allemaal geslaagd. 5 fictieve Northbridge-documenten
-geüpload. 30+ echte screenshots/assets verzameld (portaalschermen + 4 zelfgebouwde, uit echte
-data opgebouwde technische overzichtspagina's: controlegebied-tabel, roadmap-kaarten,
-"naast-uw-eigen-systeem"-diagram, audit-verify-bewijs).
+**S2 — kernel-update + één herstart:** een `apt-get update` bracht een nieuwere kernel
+(`6.8.0-147-generic`) aan het licht die de al-geïnstalleerde-maar-ongebootte 146 versloeg —
+gesimuleerd (0 te verwijderen, geen releasewissel), rechtstreeks naar 147 geïnstalleerd om een
+tweede herstart te vermijden. **Eén `reboot`, SSH terug na 15 seconden** (ruim binnen de
+10-minuten-stopgrens). Na de herstart: nieuwe kernel actief, geen `reboot-required` meer, alle
+4 diensten + `fail2ban` + `certbot.timer` actief, `ufw` ongewijzigd, certificaten ongewijzigd
+(38 dagen resterend, consistent met 43 dagen op 7 okt), een nieuwe Deploy slaagde, `/audit/
+verify` `valid` voor alle 5 organisaties met ongewijzigde rijtellingen.
 
-**Belangrijkste bevinding — een onbewezen claim gecorrigeerd vóór publicatie:** het eerste
-concept van scène 13 beweerde "Every governance action is recorded in a hash-chained audit
-log." Een directe code-audit van `app/api/governance.py` (elke write-endpoint gecontroleerd op
-een `create_audit_log()`-aanroep) toonde dit als feitelijk onjuist: vier endpoints
-(`POST /ai-systems`, `POST /ai-risks`, `DELETE /ai-risks/{id}`, `POST /production-approvals/
-{system_id}`) schrijven geen auditregel. Conform de hand-off se eigen regel ("klopt een regel
-niet, pas de aanpak aan — nooit de claim — en meld het") is de zin aangescherpt naar wat
-daadwerkelijk klopt, en die correctie is doorgevoerd in de narratie, de audio, het on-screen
-asset, het videoframe én de PDF — alle vier opnieuw gegenereerd en visueel herbevestigd.
+**S3 — bewust overgeslagen**, exact zoals de hand-off's eigen regel voorschrijft zonder publieke
+sleutel. Fase 0 voor S3 is wél al gedaan: de volledige frontend-`deploy.yml` gelezen — elke
+server-aanroep is `mkdir`/`rsync --chown=www-data`/`ln -sfn`+`mv -T`/`rm -rf`, allemaal binnen
+`/opt/valqeron-frontend`, geen enkele `systemctl`/`nginx`-aanroep. Een niet-root
+`valqeron-fe`-gebruiker is dus zonder `sudo`-regels haalbaar zodra Dennis een publieke sleutel
+levert.
 
-**Techniek onderweg:** de geïnstalleerde Homebrew-ffmpeg bleek zonder `drawtext`-filter gebouwd
-(geen `libfreetype`) — opgelost zonder herinstallatie door titel-overlays met Pillow direct op
-de screenshots te componeren, in dezelfde goud-op-donker stijl als eerdere producties. Zeer
-lange full-page-screenshots zijn gecapt op een leesbare hoogte in plaats van onleesbaar
-uitgerekt te worden.
-
-**Kwaliteitscontrole:** een verboden-woorden-scan (as-is, ready to send, automatically, fully,
-guarantee(d), continuous(ly), certified, compliant, "AI approves/decides") en een "elke absolute
-claim of elk getal heeft bewijs nodig"-scan zijn uitgevoerd over alle 15 scène-narraties en de
-4 asset-teksten — na de scène-13-correctie: 0 violaties. Alle 17 PDF-pagina's zijn naar PNG
-gerenderd en bekeken (geen lege pagina's, geen afgekapte afbeeldingen, geen losse
-onderschriften). 7 videoframes op verspreide tijdstippen zijn geëxtraheerd en bekeken
-(leesbaar, niets afgekapt, de correctie zichtbaar correct). `QUALITY-REPORT-v2.md` staat in de
-outputmap met de volledige puntsgewijze index (video-tijdstip + PDF-pagina + gebruikte zin per
-punt).
+**Eigen, zelf gevonden en zelf opgeloste fout tijdens het committen (geen hardening-
+regressie):** het testen van het nieuwe `scripts/hardening_check.sh` gebeurde eerst via `scp`
+rechtstreeks naar de server (ongetrackt); de daaropvolgende Deploy faalde daardoor één keer
+omdat `git pull` weigerde een ongetrackt bestand te overschrijven. `/health` bevestigde dat de
+service niet geraakt was (het faalde vóórdat `scripts/deploy.sh` ooit draaide); de checksum van
+het ongetrackte bestand was identiek aan de gecommitte versie, dus veilig verwijderd en opnieuw
+gepulld — de rerun slaagde. Geen tweede, onafhankelijke mislukking, dus de stopvoorwaarde
+"twee Deploys op rij falen" is niet geraakt.
 
 ## Resultaat
 
-- Video: `demo-assets/iso-cert-international/prospect/v2/video/ISO-Cert-International-Live-Environment-Walkthrough-PROSPECT-v2.mp4`
-  — 1280×720, 4:37,9 min, 5,0 MB, volledige decodeer-pass zonder fouten.
-- PDF: `demo-assets/iso-cert-international/prospect/v2/pdf/ISO-Cert-International-Live-Environment-Walkthrough-PROSPECT-v2.pdf`
-  — 17 pagina's, 5,6 MB.
-- Kwaliteitsrapport: `demo-assets/iso-cert-international/prospect/v2/QUALITY-REPORT-v2.md`.
-- **Alles staat uitsluitend lokaal.** `demo-assets/` is volledig gitignored (bevestigd vóór en
-  na dit werk met `git check-ignore`); niets van A6 is of wordt gecommit. **Niets is verzonden**
-  aan ISO Cert International of wie dan ook.
+- `fail2ban` live en bewezen (installatie + jails + dubbele sleutel-proef + Deploy-test).
+- `sshd` aangescherpt, effectief bevestigd met `sshd -T` vóór en na de reload.
+- Kernel `6.8.0-142-generic` → `6.8.0-147-generic`, één herstart, SSH terug na 15 s.
+- Nieuw `scripts/hardening_check.sh` (alleen lezen, geen IP's/geheimen) voor een herhaalbare
+  controle door Cowork of Dennis.
+- Commits: `fd7530d` (S1+S2 + script), `0c37136` (Deploy-hiccup-addendum) — beide gepusht,
+  CI/Deploy voor elke stap afzonderlijk groen bevestigd.
+- **Niets verstuurd aan derden.** Geen geheim, sleutel of IP-lijst in een bestand, log of chat.
 
-## Productiecontrole (organisatie 4)
+## Productiecontrole
 
-14 nieuwe runs (13 via API + 1 via de echte portaal-UI), 5 nieuwe fictieve documenten
-geüpload. Geen nieuwe gebruikers of wachtwoorden aangemaakt of gereset. Organisaties 1, 2, 3,
-5: niet aangeraakt.
+`/health` `ok` na elke stap (`build_sha` meegroeiend met elke commit); `/audit/verify` `valid`
+voor alle 5 organisaties na de herstart, met rijtellingen identiek aan de Batch S-baseline van
+gisteren (org 1: 519, org 2: 42, org 3: 4, org 4: 43, org 5: 15) — bevestigt dat deze batch geen
+enkele applicatie-write deed. Geen wijziging aan wachtwoorden of gebruikers. Organisaties 1 t/m
+5 verder ongewijzigd.
 
 ## WERKLIJST.md en CLAUDE.md
 
-- Rij 8 (A6) op `KLAAR` gezet.
-- Rij 5 (Batch M) teruggezet op `OPEN` — was tijdelijk op `WACHT` gezet op Dennis' verzoek zodat
-  A6 eerst kon lopen.
-- CLAUDE.md: nieuwe sectie-6-logregel voor deze sessie, HERVAT-BLOK bijgewerkt (volgende stap =
-  rij 5, Batch M), en twee verouderde alinea's rechtgezet die Batch O2 nog als "geblokkeerd"
-  en rij 2 (Batch H) nog als "volgende" beschreven — die batches waren al in een eerdere sessie
-  afgerond, alleen deze twee samenvattende alinea's waren niet meer bijgewerkt.
-- Beide bestanden gecommit (`9798f87`) en gepusht naar `origin/main`. Geen andere bestanden
-  gewijzigd of gestaged — `git status` vóór de commit bevestigde alleen `CLAUDE.md` en
-  `WERKLIJST.md` als gewijzigd, en de twee bekende, bewust nooit te committen untracked items
+- Rij 10 (serverhardening) op `KLAAR` gezet (S1+S2 gedaan, S3 bewust overgeslagen).
+- CLAUDE.md: nieuwe sectie-6-logregel voor deze sessie, de twee betrokken sectie-5-risicorijen
+  bijgewerkt (SSH-scanstorm: gemitigeerd; root-deploysleutels: S3 blijft open, nu met het
+  Fase-0-bewijs dat het haalbaar is zonder root), de infrastructuurrij in sectie 2 uitgebreid,
+  en HERVAT-BLOK bijgewerkt (volgende stap = rij 12, Batch T).
+- Alle wijzigingen gecommit en gepusht; `git status` vóór elke commit bevestigde alleen de
+  verwachte bestanden, met de twee bekende, bewust nooit te committen untracked items
   (`claude-code-handoff-reset-admin-passwords.md`, `Claude outputs/`) ongewijzigd daarbuiten.
 
 ## Niet gedaan / openstaand
 
-- **Niets verzonden** — dat was expliciet niet gevraagd en is bewust niet gedaan. Dennis moet
-  zelf de video en de PDF volledig bekijken/lezen, ISO Cert International's eigen
-  accreditatieclaims apart verifiëren, en beslissen of en wanneer iets verstuurd wordt.
-- Een oud, los `.otp`-bestand in een eerdere-sessie-scratchpad (alleen-lezen-referentiemateriaal
-  voor deze taak) is aangetroffen maar niet geopend, aangeraakt of verwijderd — gemeld in
-  `QUALITY-REPORT-v2.md` als een mogelijk achtergebleven plaintext-wachtwoordrisico uit een
-  eerdere sessie, niet iets dat deze taak zelf veroorzaakte of oploste.
-- `claude-code-handoff-reset-admin-passwords.md` blijft bewust ongetrackt op de Mac (eerdere
-  Dennis-beslissing, ongewijzigd).
-- Batch M (rij 5), Batch Q (rij 6), Batch P (rij 7) en serverhardening (rij 10): niet
-  uitgevoerd deze sessie — M is nu de volgende `OPEN`-rij, de andere drie wachten op Cowork of
-  Dennis zoals de werklijst voorschrijft.
+- **S3** (beperkte, niet-root frontend-deploygebruiker): wacht op Dennis' publieke
+  `ssh-ed25519`-sleutel (nooit de privésleutel). Fase 0 is al gedaan — technisch haalbaar zonder
+  `sudo`-regels.
+- Geen wijziging aan de SSH-poort of `ufw`-regels, geen `PermitRootLogin no` (alleen
+  `prohibit-password`), geen beperkte backend-deploygebruiker, geen back-up (Batch P wacht nog
+  op Dennis' vier leveringen) — allemaal bewust buiten dit batch, zoals de hand-off voorschrijft.
+- Rij 12 (Batch T, auditregels voor `app/api/users.py`) is de volgende `OPEN`-rij met een
+  voldane voorwaarde — nog niet gestart deze sessie.
+- Rij 7 (Batch P) blijft `WACHT OP DENNIS`.
 
-Geen migraties, geen auth/MFA/ops-codewijzigingen, geen productcodewijzigingen van welke aard
-dan ook — A6 is uitsluitend contentproductie in een gitignored map.
+Geen migraties, geen applicatiecode-wijzigingen, geen wijziging aan auth/MFA/provisioning —
+uitsluitend serverinfrastructuur (SSH, fail2ban, kernel), zoals de hand-off voorschrijft.
