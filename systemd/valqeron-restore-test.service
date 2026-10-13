@@ -1,0 +1,9 @@
+[Unit]
+Description=Valqeron weekly automated restore test (Batch P2)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/valqeron/scripts/restore_test.sh
+Nice=10
+IOSchedulingClass=3

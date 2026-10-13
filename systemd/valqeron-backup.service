@@ -1,0 +1,9 @@
+[Unit]
+Description=Valqeron daily encrypted database backup (Batch P1)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/valqeron/scripts/backup_db.sh
+Nice=10
+IOSchedulingClass=3

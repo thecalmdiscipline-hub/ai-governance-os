@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly (Batch P3)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

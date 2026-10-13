@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly, Sunday 04:30 UTC (Batch P2)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

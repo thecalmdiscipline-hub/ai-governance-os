@@ -1,0 +1,6 @@
+[Unit]
+Description=Valqeron hourly disk-usage check (Batch P3)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/valqeron/scripts/disk_alarm.sh
