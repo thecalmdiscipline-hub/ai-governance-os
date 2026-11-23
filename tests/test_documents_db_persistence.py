@@ -21,7 +21,7 @@ def test_document_upload_persists_db_record():
     upload = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("db_document.txt", BytesIO(b"db persistence"), "text/plain")},
+        files={"file": ("[scope=kennis] db_document.txt", BytesIO(b"scope: kennis\ndb persistence"), "text/plain")},
     )
 
     assert upload.status_code == 200
@@ -33,6 +33,6 @@ def test_document_upload_persists_db_record():
     db.close()
 
     assert row is not None
-    assert row.filename == "db_document.txt"
+    assert row.filename == "[scope=kennis] db_document.txt"
     assert row.organization_id == 1
     assert row.uploaded_by_user_id == 1

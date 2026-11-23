@@ -26,7 +26,7 @@ def test_document_upload_and_delete_create_audit_logs():
     upload = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("audit_doc.txt", BytesIO(b"audit content"), "text/plain")},
+        files={"file": ("[scope=kennis] audit_doc.txt", BytesIO(b"scope: kennis\naudit content"), "text/plain")},
     )
     assert upload.status_code == 200
     doc_id = upload.json()["document"]["id"]

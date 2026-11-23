@@ -8,7 +8,8 @@ from app.api.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.models.document import Document
 from app.services.document_storage import save_uploaded_document, list_uploaded_documents
-from app.services.document_reader import read_text_document
+from app.services.document_reader import read_text_document, read_text_from_bytes
+from app.services.document_scope import ScopeValidationError, scopes_for_upload
 from app.core.audit import create_audit_log
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -38,13 +39,22 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="User has no organization")
 
     content = await file.read()
+    filename = file.filename or "uploaded_file"
+
+    # V1/V5: validate the scope codes before anything is written to disk or the database.
+    try:
+        codes = scopes_for_upload(filename, read_text_from_bytes(filename, content))
+    except ScopeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"error": exc.error, "message": exc.message})
+
     saved = save_uploaded_document(
         db=db,
         organization_id=int(current_user.organization_id),
         uploaded_by_user_id=current_user.id,
-        filename=file.filename or "uploaded_file",
+        filename=filename,
         content=content,
         content_type=file.content_type,
+        scope_codes=codes,
     )
 
     create_audit_log(
@@ -53,7 +63,7 @@ async def upload_document(
         entity_type="document",
         entity_id=int(saved["id"]),
         action="uploaded",
-        details=f'Document uploaded: filename={saved["filename"]}, stored_name={saved["stored_name"]}, size={saved["size"]}',
+        details=f'Document uploaded: filename={saved["filename"]}, stored_name={saved["stored_name"]}, size={saved["size"]}, scope_codes={",".join(saved["scope_codes"])}',
         performed_by=current_user.username,
     )
 
@@ -105,6 +115,8 @@ def get_document_detail(
             "content_type": row.content_type,
             "size": row.size,
             "created_at": row.created_at.isoformat() if row.created_at else "",
+            "scope_status": row.scope_status,
+            "scope_codes": [c.code for c in row.scope_codes],
         },
     }
 

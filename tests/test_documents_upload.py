@@ -18,13 +18,13 @@ def test_document_upload_and_list():
     upload = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("test_document.txt", BytesIO(b"hello upload"), "text/plain")},
+        files={"file": ("[scope=kennis] test_document.txt", BytesIO(b"scope: kennis\nhello upload"), "text/plain")},
     )
 
     assert upload.status_code == 200
     upload_data = upload.json()
     assert upload_data["status"] == "ok"
-    assert upload_data["document"]["filename"] == "test_document.txt"
+    assert upload_data["document"]["filename"] == "[scope=kennis] test_document.txt"
 
     listing = client.get(
         "/documents",
@@ -35,4 +35,4 @@ def test_document_upload_and_list():
     listing_data = listing.json()
     assert listing_data["status"] == "ok"
     assert listing_data["total"] >= 1
-    assert any(item["filename"] == "test_document.txt" for item in listing_data["items"])
+    assert any(item["filename"] == "[scope=kennis] test_document.txt" for item in listing_data["items"])

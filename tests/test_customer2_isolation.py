@@ -22,7 +22,7 @@ def test_customer2_sees_only_own_documents_and_workflows():
     upload_res = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {customer2_token}"},
-        files={"file": ("customer2_isolation.txt", b"customer2 private content", "text/plain")},
+        files={"file": ("[scope=kennis] customer2_isolation.txt", b"scope: kennis\ncustomer2 private content", "text/plain")},
     )
     assert upload_res.status_code == 200
 
@@ -32,7 +32,7 @@ def test_customer2_sees_only_own_documents_and_workflows():
     )
     assert customer2_docs.status_code == 200
     customer2_items = customer2_docs.json()["items"]
-    assert any(item["filename"] == "customer2_isolation.txt" for item in customer2_items)
+    assert any(item["filename"] == "[scope=kennis] customer2_isolation.txt" for item in customer2_items)
 
     admin_docs = client.get(
         "/documents",
@@ -40,7 +40,7 @@ def test_customer2_sees_only_own_documents_and_workflows():
     )
     assert admin_docs.status_code == 200
     admin_items = admin_docs.json()["items"]
-    assert all(item["filename"] != "customer2_isolation.txt" for item in admin_items)
+    assert all(item["filename"] != "[scope=kennis] customer2_isolation.txt" for item in admin_items)
 
     run_res = client.post(
         "/workflows/customer-support/run",
