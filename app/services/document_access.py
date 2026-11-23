@@ -3,6 +3,7 @@
 This is the ONLY place that decides document access for a workflow. No workflow builds its own
 document query: they call load_scoped_documents()/read_scoped_documents() from here.
 """
+from contextvars import ContextVar
 from typing import Dict, Iterable, List, Optional, Set
 
 from app.db.session import SessionLocal
@@ -13,6 +14,30 @@ from app.services.document_scope_codes import EXCLUSIVE_CODES, SHARED_CODE, WORK
 
 MAX_DOCS = 5               # V20
 MAX_CHARS_PER_DOC = 6000   # V20
+
+# B6: the runner opens a capture before calling a workflow; read_scoped_documents() records every
+# document it hands to the workflow, so the runner can write document_usage and the audit line
+# without trusting the workflow's own output.
+_usage_capture: ContextVar[Optional[Dict]] = ContextVar("document_usage_capture", default=None)
+
+
+def start_usage_capture():
+    return _usage_capture.set({"accessed": False, "docs": {}})
+
+
+def finish_usage_capture(token) -> Dict:
+    capture = _usage_capture.get() or {"accessed": False, "docs": {}}
+    _usage_capture.reset(token)
+    return {"accessed": capture["accessed"], "docs": list(capture["docs"].values())}
+
+
+def _record_usage(docs: List[Dict]) -> None:
+    capture = _usage_capture.get()
+    if capture is None:
+        return
+    capture["accessed"] = True
+    for d in docs:
+        capture["docs"].setdefault(d["id"], {"id": d["id"], "filename": d["filename"], "codes": list(d["codes"])})
 
 
 def workflow_scope_code(workflow_key: str) -> str:
@@ -99,12 +124,14 @@ def read_scoped_documents(
 ) -> List[Dict]:
     """Like load_scoped_documents, plus the text (max MAX_CHARS_PER_DOC); unreadable files skipped."""
     if org_id is None:
+        _record_usage([])
         return []
     docs: List[Dict] = []
     for meta in load_scoped_documents(int(org_id), workflow_key, stored_names=stored_names, limit=limit):
         text = read_text_document(int(org_id), meta["stored_name"])
         if text:
             docs.append({**meta, "text": text[:MAX_CHARS_PER_DOC]})
+    _record_usage(docs)
     return docs
 
 
