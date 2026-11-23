@@ -19,5 +19,15 @@ class Document(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    # Fase B: 'uncoded' | 'coded' | 'archived'. Only 'coded' documents are read by a workflow
+    # (see app/services/document_access.py).
+    scope_status = Column(String(16), nullable=False, default="uncoded", server_default="uncoded", index=True)
+
     organization = relationship("Organization", back_populates="documents")
     uploaded_by = relationship("User")
+    scope_codes = relationship(
+        "DocumentScopeCode",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentScopeCode.code",
+    )
