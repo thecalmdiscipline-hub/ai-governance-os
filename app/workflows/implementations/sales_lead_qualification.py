@@ -43,7 +43,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.core import pii_anonymizer
-from app.services.document_access import format_documents_for_prompt, read_scoped_documents
+from app.services.document_access import format_documents_for_prompt, read_scoped_documents, sources_for
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +224,7 @@ def _fallback_result(reason: str) -> Dict[str, Any]:
 
 def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any]:
     inp = payload.get("input") or {}
+    docs: List[Dict[str, Any]] = []  # documents read for this run (V22: reported as `sources`)
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -233,6 +234,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             "status": "degraded",
             **_fallback_result("OPENAI_API_KEY not configured"),
             "degraded_reason": "OPENAI_API_KEY not configured",
+            "sources": [],
 
             "user_id": user_id,
         }
@@ -281,6 +283,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
             **result,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
+            "sources": sources_for(docs),
 
             "user_id": user_id,
         }
@@ -314,5 +317,6 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         "status": "degraded",
         **_fallback_result(reason),
         "degraded_reason": reason,
+        "sources": sources_for(docs),
         "user_id": user_id,
     }

@@ -114,3 +114,8 @@ def format_documents_for_prompt(docs: List[Dict]) -> str:
         parts.append(f"\n--- [{doc['filename']}] ---")
         parts.append(doc["text"][:MAX_CHARS_PER_DOC])
     return "\n".join(parts)
+
+
+def sources_for(docs: List[Dict]) -> List[Dict]:
+    """V22: the documents a run read, as [{filename, codes}] (never the text)."""
+    return [{"filename": d["filename"], "codes": list(d["codes"])} for d in docs]

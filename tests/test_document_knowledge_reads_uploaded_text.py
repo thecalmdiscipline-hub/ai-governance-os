@@ -50,5 +50,6 @@ def test_document_knowledge_reads_uploaded_text(monkeypatch):
 
     assert result["answer"]["confidence"] in {"medium", "high"}
     assert result["answer"]["top_sources"] == [stored_name]
-    assert len(result["answer"]["document_snippets"]) == 1
-    assert "pricing information" in result["answer"]["document_snippets"][0]["snippet"]
+    # Fase B (V8/V22): no raw snippets any more, only the sources with their codes.
+    assert "document_snippets" not in result["answer"]
+    assert result["sources"] == [{"filename": stored_name, "codes": ["kennis"]}]

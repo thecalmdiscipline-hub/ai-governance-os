@@ -13,18 +13,18 @@ Output (always returned, even on LLM failure):
     summary          : AI-generated answer to the question
     top_sources      : Filenames of documents used in the answer
     confidence       : "high" | "medium" | "low"
-    document_snippets: list[{document, snippet}]
     auto_selected_documents: bool
+  sources            : list[{filename, codes}] — documents read for this run (V22)
+
+Documents: only those within this workflow's scope (kennis or gedeeld), via
+app/services/document_access.py. Raw document text is never returned (V8: no snippets).
 
 PII handling: the user message (the question plus the content of every
 loaded document) is anonymised via app.core.pii_anonymizer before being
 sent to OpenAI. The documents come from this organization's own Document
 table (app/models/document.py), not from the requesting user personally
 — but every member of an organization can already query any document in
-that same organization through this very workflow (and see it raw,
-unredacted, in answer.document_snippets below, which is built from the
-ORIGINAL document text, never anonymized — see _load_documents() /
-the loop below). Restoring a placeholder in the AI-generated answer
+that same organization (within this workflow's scope). Restoring a placeholder in the AI-generated answer
 therefore exposes nothing a member of this organization could not
 already see by the normal use of this same endpoint; the trust boundary
 here, as everywhere else in this codebase, is organization membership,
@@ -32,10 +32,9 @@ not "the one user who happened to upload the file". answer.summary and
 answer.reasoning are the LLM's own free text and are run through
 pii_anonymizer.restore_placeholders() before being returned (see
 app/core/pii_anonymizer.py and CLAUDE.md §6). confidence/sources_used/
-top_sources/document_snippets/auto_selected_documents are either enums,
-filtered against known filenames, or (for document_snippets) the raw
-original text — none of them pass through the LLM's own free-text
-output, so none need restore.
+top_sources/auto_selected_documents/sources are either enums or filtered
+against known filenames — none of them pass through the LLM's own
+free-text output, so none need restore.
 """
 from __future__ import annotations
 
@@ -45,7 +44,7 @@ import os
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from app.services.document_access import MAX_CHARS_PER_DOC, MAX_DOCS, read_scoped_documents
+from app.services.document_access import MAX_CHARS_PER_DOC, MAX_DOCS, read_scoped_documents, sources_for
 
 from app.core import pii_anonymizer
 
@@ -110,12 +109,11 @@ def _parse_llm_response(content: str) -> Dict[str, Any]:
     }
 
 
-def _fallback_answer(reason: str, doc_snippets: List[Dict], top_sources: List[str], auto_selected: bool) -> Dict[str, Any]:
+def _fallback_answer(reason: str, top_sources: List[str], auto_selected: bool) -> Dict[str, Any]:
     return {
         "summary": f"Automated document analysis could not be completed: {reason}",
         "top_sources": top_sources,
         "confidence": "low",
-        "document_snippets": doc_snippets,
         "auto_selected_documents": auto_selected,
     }
 
@@ -143,10 +141,7 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
     # with or without an explicit selection.
     doc_contents = read_scoped_documents(org_id, "document_knowledge", stored_names=explicit_doc_refs or None)
     auto_selected = bool(doc_contents) and not explicit_doc_refs
-
-    doc_snippets: List[Dict[str, str]] = [
-        {"document": d["filename"], "snippet": d["text"][:500].strip()} for d in doc_contents
-    ]
+    sources = sources_for(doc_contents)
 
     top_sources = [d["filename"] for d in doc_contents]
 
@@ -155,11 +150,11 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         return {
             "status": "ok",
             "query_id": query_id,
+            "sources": sources,
             "answer": {
                 "summary": "No question provided.",
                 "top_sources": top_sources,
                 "confidence": "low",
-                "document_snippets": doc_snippets,
                 "auto_selected_documents": auto_selected,
             },
 
@@ -171,11 +166,11 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         return {
             "status": "ok",
             "query_id": query_id,
+            "sources": sources,
             "answer": {
                 "summary": "No documents with readable content were available to answer the question.",
                 "top_sources": [],
                 "confidence": "low",
-                "document_snippets": [],
                 "auto_selected_documents": auto_selected,
             },
 
@@ -189,7 +184,8 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         return {
             "status": "degraded",
             "query_id": query_id,
-            "answer": _fallback_answer("OPENAI_API_KEY not configured", doc_snippets, top_sources, auto_selected),
+            "sources": sources,
+            "answer": _fallback_answer("OPENAI_API_KEY not configured", top_sources, auto_selected),
             "degraded_reason": "OPENAI_API_KEY not configured",
 
             "user_id": user_id,
@@ -236,11 +232,11 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
         return {
             "status": "ok",
             "query_id": query_id,
+            "sources": sources,
             "answer": {
                 "summary": parsed["answer"],
                 "top_sources": cited_sources,
                 "confidence": parsed["confidence"],
-                "document_snippets": doc_snippets,
                 "auto_selected_documents": auto_selected,
                 "reasoning": parsed["reasoning"],
             },
@@ -277,7 +273,8 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
     return {
         "status": "degraded",
         "query_id": query_id,
-        "answer": _fallback_answer(reason, doc_snippets, top_sources, auto_selected),
+        "sources": sources,
+        "answer": _fallback_answer(reason, top_sources, auto_selected),
         "degraded_reason": reason,
         "user_id": user_id,
     }

@@ -201,3 +201,44 @@ def test_compliance_monitoring_adds_in_scope_documents_to_prompt(org_id, monkeyp
     run({"input": {"policy_text": "x"}, "org_id": org_id}, user_id=None)
     assert "quarterly audit" in prompts[0]
     assert "Campaign brief" not in prompts[0]
+
+
+# --- B4: no snippets, sources everywhere -----------------------------------
+
+def test_document_knowledge_response_has_sources_and_no_snippets(org_id, monkeypatch):  # test 13
+    from app.workflows.implementations.document_knowledge import run
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-dummy-key")
+    stored = _doc(org_id, ["kennis", "gedeeld"], body="The bronze plan costs 10 EUR per month.")
+    mock_openai_response(monkeypatch, {
+        "answer": "10 EUR.", "confidence": "high", "sources_used": [stored], "reasoning": "Stated.",
+    })
+    result = run(payload={"input": {"question": "Price?"}, "context": {}, "org_id": org_id}, user_id=None)
+    assert result["status"] == "ok"
+    assert "snippet" not in str(result)
+    assert "costs 10 EUR per month" not in str(result)
+    assert result["sources"] == [{"filename": stored, "codes": ["gedeeld", "kennis"]}]
+
+
+def test_document_knowledge_without_documents_reports_empty_sources(org_id):
+    from app.workflows.implementations.document_knowledge import run
+
+    result = run(payload={"input": {"question": "Price?"}, "context": {}, "org_id": org_id}, user_id=None)
+    assert result["sources"] == []
+    assert "snippet" not in str(result)
+
+
+def test_sales_and_compliance_report_sources(org_id, monkeypatch):
+    from app.workflows.implementations.compliance_monitoring import run as compliance_run
+    from app.workflows.implementations.sales_lead_qualification import run as sales_run
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-dummy-key")
+    sales_doc = _doc(org_id, ["sales"], body="Price list.")
+    comp_doc = _doc(org_id, ["compliance"], body="Audit procedure.")
+    shared = _doc(org_id, ["gedeeld"], body="Handbook.")
+
+    sales = sales_run({"input": {"company": "Acme"}, "org_id": org_id}, user_id=None)
+    assert {s["filename"] for s in sales["sources"]} == {sales_doc, shared}
+
+    comp = compliance_run({"input": {"policy_text": "x"}, "org_id": org_id}, user_id=None)
+    assert {s["filename"] for s in comp["sources"]} == {comp_doc, shared}
