@@ -25,6 +25,7 @@ def test_document_knowledge_reads_uploaded_text(monkeypatch):
         path=str(org_dir / stored_name),
         content_type="text/plain",
         size=len("This document contains pricing information for the bronze plan."),
+        scope_codes=["kennis"],
     )
 
     mock_openai_response(monkeypatch, {

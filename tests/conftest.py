@@ -280,6 +280,7 @@ def ensure_document(
     path,
     content_type="text/plain",
     size=0,
+    scope_codes=None,
 ):
     """Get-or-recreate a Document row by stored_name (globally unique column).
 
@@ -289,6 +290,7 @@ def ensure_document(
     """
     from app.db.session import SessionLocal
     from app.models.document import Document
+    from app.models.document_scope_code import DocumentScopeCode
 
     db = SessionLocal()
     try:
@@ -306,6 +308,11 @@ def ensure_document(
             content_type=content_type,
             size=size,
         )
+        # Fase B: with scope_codes the row is 'coded' (readable by workflows in scope);
+        # without, it stays 'uncoded' and no workflow reads it.
+        if scope_codes:
+            doc.scope_status = "coded"
+            doc.scope_codes = [DocumentScopeCode(code=c) for c in sorted(set(scope_codes))]
         db.add(doc)
         db.commit()
         db.refresh(doc)

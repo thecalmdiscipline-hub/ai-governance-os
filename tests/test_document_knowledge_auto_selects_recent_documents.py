@@ -11,6 +11,7 @@ def test_document_knowledge_auto_selects_recent_documents():
         path="uploaded_documents/org_1/auto_doc.txt",
         content_type="text/plain",
         size=24,
+        scope_codes=["kennis"],
     )
 
     result = run_workflow(

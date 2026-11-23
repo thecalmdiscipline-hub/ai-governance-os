@@ -38,6 +38,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.core import pii_anonymizer
+from app.services.document_access import format_documents_for_prompt, read_scoped_documents
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,18 @@ def _build_user_message(input_data: Dict[str, Any], context: Dict[str, Any]) -> 
         )
 
     return "\n".join(parts)
+
+
+def _org_id(payload: Dict[str, Any], org_id: Optional[int]) -> Optional[int]:
+    # The runner passes org_id inside the payload only; the parameter is kept for direct callers.
+    return org_id if org_id is not None else payload.get("org_id")
+
+
+def _doc_refs(input_data: Dict[str, Any], context: Dict[str, Any]) -> List[str]:
+    refs = input_data.get("documents") or context.get("documents")
+    if not refs:
+        return []
+    return [str(r) for r in refs] if isinstance(refs, list) else [str(refs)]
 
 
 def _parse_llm_response(content: str) -> Dict[str, Any]:
@@ -196,6 +209,14 @@ def compliance_monitoring(
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data, context)
+        # Fase B (V21): documents in this workflow's scope are added as context. Without any
+        # readable document the message is exactly as before.
+        docs = read_scoped_documents(
+            _org_id(payload, org_id), "compliance_monitoring",
+            stored_names=_doc_refs(input_data, context) or None,
+        )
+        if docs:
+            user_message += "\n\nOrganisation documents (in scope for compliance):" + format_documents_for_prompt(docs)
         user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
             user_message, workflow="compliance_monitoring"
         )

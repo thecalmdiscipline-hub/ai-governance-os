@@ -43,6 +43,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.core import pii_anonymizer
+from app.services.document_access import format_documents_for_prompt, read_scoped_documents
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,13 @@ def _build_user_message(inp: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
     logger.debug("sales_lead_qualification: user message built:\n%s", "\n".join(parts))
     return "\n".join(parts)
+
+
+def _doc_refs(inp: Dict[str, Any], payload: Dict[str, Any]) -> List[str]:
+    refs = inp.get("documents") or (payload.get("context") or {}).get("documents")
+    if not refs:
+        return []
+    return [str(r) for r in refs] if isinstance(refs, list) else [str(refs)]
 
 
 def _parse_score(raw: Any) -> int:
@@ -234,6 +242,14 @@ def run(payload: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(inp, payload)
+        # Fase B (V21): documents in this workflow's scope are added as context. Without any
+        # readable document the message is exactly as before.
+        docs = read_scoped_documents(
+            payload.get("org_id"), "sales_lead_qualification",
+            stored_names=_doc_refs(inp, payload) or None,
+        )
+        if docs:
+            user_message += "\n\nReference documents (company context):" + format_documents_for_prompt(docs)
         user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
             user_message, workflow="sales_lead_qualification"
         )

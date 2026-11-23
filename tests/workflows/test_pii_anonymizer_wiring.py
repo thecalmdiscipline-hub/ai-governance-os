@@ -195,6 +195,7 @@ def _setup_document_knowledge_fixture_document():
         path=str(org_dir / stored_name),
         content_type="text/plain",
         size=len(content),
+        scope_codes=["kennis"],
     )
     return stored_name
 

@@ -31,6 +31,7 @@ def test_document_knowledge_returns_query_id_and_answer(monkeypatch):
         path=str(org_dir / stored_name),
         content_type="text/plain",
         size=len(content),
+        scope_codes=["kennis"],
     )
 
     mock_openai_response(monkeypatch, {
