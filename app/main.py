@@ -136,6 +136,7 @@ from app.api.ops_accounts import router as ops_accounts_router
 from app.api.ops_onboarding import router as ops_onboarding_router
 from app.api.ops_provisioning import router as ops_provisioning_router
 from app.api.ops_support import router as ops_support_router
+from app.api.ops_staff import router as ops_staff_router
 from app.api.support_requests import router as support_requests_router
 from app.api.health import router as health_router
 from app.api.microsoft import router as microsoft_router
@@ -151,6 +152,7 @@ app.include_router(ops_accounts_router)
 app.include_router(ops_onboarding_router)
 app.include_router(ops_provisioning_router)
 app.include_router(ops_support_router)
+app.include_router(ops_staff_router)
 app.include_router(support_requests_router)
 app.include_router(users_router)
 app.include_router(governance_router)

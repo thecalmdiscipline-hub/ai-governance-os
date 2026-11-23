@@ -75,3 +75,24 @@ def test_b1_downgrade_restores_previous_schema_and_keeps_rows(engine):
     assert "scope_status" not in {c["name"] for c in insp.get_columns("documents")}
     with engine.begin() as conn:
         assert conn.execute(sa.text("SELECT filename FROM documents WHERE id=1")).scalar() == "old.txt"
+
+
+def test_b5_upgrade_and_downgrade(engine):
+    with engine.begin() as conn:
+        conn.execute(sa.text("CREATE TABLE workflow_runs (id INTEGER PRIMARY KEY, run_id VARCHAR NOT NULL UNIQUE)"))
+        conn.execute(sa.text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR NOT NULL)"))
+        conn.execute(sa.text("INSERT INTO users (id, username) VALUES (1, 'u')"))
+    b1, b5 = _load("507b3c60b20b"), _load("bab4f26df0b0")
+    _run(engine, b1.upgrade)
+    _run(engine, b5.upgrade)
+    insp = sa.inspect(engine)
+    assert "document_usage" in insp.get_table_names()
+    with engine.begin() as conn:
+        assert conn.execute(sa.text("SELECT is_valqeron_admin FROM users WHERE id=1")).scalar() in (0, False)
+
+    _run(engine, b5.downgrade)
+    insp = sa.inspect(engine)
+    assert "document_usage" not in insp.get_table_names()
+    assert "is_valqeron_admin" not in {c["name"] for c in insp.get_columns("users")}
+    with engine.begin() as conn:
+        assert conn.execute(sa.text("SELECT username FROM users WHERE id=1")).scalar() == "u"

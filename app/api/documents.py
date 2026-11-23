@@ -1,15 +1,20 @@
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from app.api.dependencies import get_db, get_current_user, require_any_role, require_valqeron_admin
+from app.core.ops_audit import log_ops_action
+from app.models.document_scope_code import DocumentScopeCode
+from app.models.document_usage import DocumentUsage
 from app.models.user import User
 from app.models.document import Document
 from app.services.document_storage import save_uploaded_document, list_uploaded_documents
 from app.services.document_reader import read_text_document, read_text_from_bytes
-from app.services.document_scope import ScopeValidationError, scopes_for_upload
+from app.services.document_scope import ScopeValidationError, scopes_for_upload, validate_scopes
 from app.core.audit import create_audit_log
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -29,10 +34,18 @@ def get_org_document(db: Session, organization_id: int, document_id: int) -> Doc
     return row
 
 
+# V6: admin and operator may upload; auditor (and any other role) may not.
+UPLOAD_ROLES = ("admin", "operator")
+
+
+def document_was_used(db: Session, document_id: int) -> bool:
+    return db.query(DocumentUsage.id).filter(DocumentUsage.document_id == document_id).first() is not None
+
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_role(*UPLOAD_ROLES)),
     db: Session = Depends(get_db),
 ):
     if current_user.organization_id is None:
@@ -57,6 +70,24 @@ async def upload_document(
         scope_codes=codes,
     )
 
+    # V30: a new upload with the same filename replaces the previous coded version(s) of this
+    # organization; those are archived, never deleted.
+    replaced = (
+        db.query(Document)
+        .filter(
+            Document.organization_id == int(current_user.organization_id),
+            Document.filename == saved["filename"],
+            Document.scope_status == "coded",
+            Document.id != int(saved["id"]),
+        )
+        .all()
+    )
+    replaced_ids = [row.id for row in replaced]
+    for row in replaced:
+        row.scope_status = "archived"
+    if replaced:
+        db.commit()
+
     create_audit_log(
         db=db,
         organization_id=int(current_user.organization_id),
@@ -67,10 +98,22 @@ async def upload_document(
         performed_by=current_user.username,
     )
 
+    for old_id in replaced_ids:
+        create_audit_log(
+            db=db,
+            organization_id=int(current_user.organization_id),
+            entity_type="document",
+            entity_id=old_id,
+            action="archived",
+            details=f"Document archived: replaced by document {saved['id']}",
+            performed_by=current_user.username,
+        )
+
     return {
         "status": "ok",
         "organization_id": current_user.organization_id,
         "document": saved,
+        "replaced_document_ids": replaced_ids,
     }
 
 
@@ -188,6 +231,26 @@ def delete_document(
 
     row = get_org_document(db, int(current_user.organization_id), document_id)
 
+    # V29: a document that was read by a workflow run is archived, never deleted.
+    if document_was_used(db, row.id):
+        already = row.scope_status == "archived"
+        row.scope_status = "archived"
+        db.commit()
+        if not already:
+            create_audit_log(
+                db=db,
+                organization_id=int(current_user.organization_id),
+                entity_type="document",
+                entity_id=row.id,
+                action="archived",
+                details=f"Document archived instead of deleted (used in a workflow run): filename={row.filename}",
+                performed_by=current_user.username,
+            )
+        return {
+            "status": "ok",
+            "archived": {"id": row.id, "filename": row.filename, "stored_name": row.stored_name},
+        }
+
     deleted = {
         "id": row.id,
         "filename": row.filename,
@@ -215,3 +278,50 @@ def delete_document(
         "status": "ok",
         "deleted": deleted,
     }
+
+
+class ScopeAssignment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    codes: List[str]
+
+
+# Statuses from which a Valqeron administrator may assign codes (V7: codes are fixed once set).
+ASSIGNABLE_STATUSES = ("uncoded",)
+
+
+@router.patch("/{document_id}/scope")
+def assign_document_scope(
+    document_id: int,
+    body: ScopeAssignment,
+    current_user: User = Depends(require_valqeron_admin),
+    db: Session = Depends(get_db),
+):
+    """B5/B3c: only a Valqeron administrator (HQ, is_valqeron_admin, MFA) assigns codes to a
+    document of any organization, and only while the document has no codes yet."""
+    row = db.query(Document).filter(Document.id == document_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if row.scope_status not in ASSIGNABLE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "scope_fixed", "message": f"Codes cannot be assigned to a document with status {row.scope_status}."},
+        )
+    codes = sorted({c.strip() for c in body.codes if c and c.strip()})
+    try:
+        validate_scopes(codes)
+    except ScopeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"error": exc.error, "message": exc.message})
+
+    previous_status = row.scope_status
+    row.scope_codes = [DocumentScopeCode(code=c) for c in codes]
+    row.scope_status = "coded"
+    db.commit()
+
+    log_ops_action(
+        db,
+        current_user,
+        "document_scope_assigned",
+        target_org_id=row.organization_id,
+        details=f"document {row.id}: {previous_status} -> coded, codes={','.join(codes)}",
+    )
+    return {"status": "ok", "document": {"id": row.id, "scope_status": row.scope_status, "scope_codes": codes}}
