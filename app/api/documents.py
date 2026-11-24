@@ -6,12 +6,13 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user, require_any_role, require_valqeron_admin
+from app.api.dependencies import get_db, get_current_user, has_valqeron_admin_powers, require_any_role, require_valqeron_admin
 from app.core.ops_audit import log_ops_action
 from app.models.document_scope_code import DocumentScopeCode
 from app.models.document_usage import DocumentUsage
 from app.models.user import User
 from app.models.document import Document
+from app.models.organization import Organization
 from app.services.document_storage import save_uploaded_document, list_uploaded_documents
 from app.services.document_reader import read_text_document, read_text_from_bytes
 from app.services.document_scope import ScopeValidationError, scopes_for_upload, validate_scopes
@@ -33,6 +34,36 @@ def get_org_document(db: Session, organization_id: int, document_id: int) -> Doc
     if row is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return row
+
+
+def get_readable_document(db: Session, user: User, document_id: int) -> Document:
+    """B5b: the document whose content (download or preview) this user may see.
+
+    - Not archived: only documents of the user's own organization (unchanged).
+    - Archived: a Valqeron administrator (any organization); a user of the document's own
+      organization only when that organization has archive_download_enabled (otherwise 403).
+    A document of another organization is always a 404 for a customer user (no existence leak).
+    """
+    row = db.query(Document).filter(Document.id == document_id).first()
+    own = row is not None and user.organization_id is not None and row.organization_id == int(user.organization_id)
+    if row is None or (not own and not (row.scope_status == "archived" and has_valqeron_admin_powers(user))):
+        raise HTTPException(status_code=404, detail="Document not found")
+    if row.scope_status == "archived" and not has_valqeron_admin_powers(user):
+        org = db.get(Organization, row.organization_id)
+        if not (org and org.archive_download_enabled):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "archive_download_disabled",
+                        "message": "Archived documents can only be downloaded by Valqeron for this organization."},
+            )
+    return row
+
+
+def _audit_valqeron_archive_access(db: Session, user: User, row: Document, what: str) -> None:
+    # A Valqeron administrator reading an archived document of a customer: HQ chain + customer chain.
+    if row.scope_status == "archived" and has_valqeron_admin_powers(user):
+        log_ops_action(db, user, f"archived_document_{what}", target_org_id=row.organization_id,
+                       details=f"document {row.id}: {row.filename}")
 
 
 # V6: admin and operator may upload; auditor (and any other role) may not.
@@ -188,15 +219,16 @@ def preview_document(
     if current_user.organization_id is None:
         raise HTTPException(status_code=400, detail="User has no organization")
 
-    row = get_org_document(db, int(current_user.organization_id), document_id)
+    row = get_readable_document(db, current_user, document_id)
 
     text = read_text_document(
-        organization_id=int(current_user.organization_id),
+        organization_id=int(row.organization_id),
         stored_name=row.stored_name,
     )
 
     if text is None:
         raise HTTPException(status_code=400, detail="Preview not available for this file type")
+    _audit_valqeron_archive_access(db, current_user, row, "previewed")
 
     return {
         "status": "ok",
@@ -222,11 +254,12 @@ def download_document(
     if current_user.organization_id is None:
         raise HTTPException(status_code=400, detail="User has no organization")
 
-    row = get_org_document(db, int(current_user.organization_id), document_id)
+    row = get_readable_document(db, current_user, document_id)
 
     file_path = Path(row.path)
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File missing on disk")
+    _audit_valqeron_archive_access(db, current_user, row, "downloaded")
 
     return FileResponse(
         path=str(file_path),
@@ -339,6 +372,26 @@ def assign_document_scope(
             status_code=409,
             detail={"error": "scope_fixed", "message": f"This document already has codes {','.join(existing)}; they cannot be changed."},
         )
+
+    # V30: only one active version per filename. Restoring an archived version while another version
+    # with the same name is coded (normally the newer one that replaced it) would make two active.
+    if row.scope_status == "archived":
+        active = (
+            db.query(Document.id)
+            .filter(
+                Document.organization_id == row.organization_id,
+                Document.filename == row.filename,
+                Document.scope_status == "coded",
+                Document.id != row.id,
+            )
+            .first()
+        )
+        if active is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "active_version_exists",
+                        "message": f"Document {active.id} with the same filename is active; archive it first."},
+            )
 
     previous_status = row.scope_status
     if not existing:

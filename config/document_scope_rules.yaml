@@ -7,11 +7,14 @@
 # Each rule:
 #   name:            short unique name (shown in the suggestion response)
 #   document_types:  file extensions without the dot (optional)
-#   keywords:        words looked for, case-insensitive, in the filename and the document text (optional)
+#   keywords:        words looked for, case-insensitive and as whole words, in the filename and the
+#                    document text (optional). "invoice" does not match "invoicing".
+#   match:           "any" (default): extension in document_types OR one keyword occurs.
+#                    "all": extension in document_types AND one keyword occurs (needs both fields).
 #   codes:           one or more codes from app/services/document_scope_codes.py
-# A rule needs at least one of document_types / keywords. It matches when the file's extension is in
-# document_types OR one of its keywords occurs. The suggestion is the union of the codes of all
-# matching rules.
+# A rule needs at least one of document_types / keywords. The suggestion is the union of the codes of
+# all matching rules, except: if a rule suggesting 'hr' matches, the suggestion is only [hr]
+# ('hr' is never suggested together with another code, B3a).
 #
 # Every code is checked when the app starts: an unknown code (or 'hr' combined with another code)
 # stops the app with a clear error. The codes list itself is only changed in code, with review.
@@ -39,11 +42,12 @@ rules:
     keywords: [campagne, merkrichtlijnen, huisstijl, brand guidelines]
     codes: [marketing]
   - name: compliance
-    keywords: [iso 27001, iso 42001, ai act, avg, gdpr, auditbewijs, procedure]
+    keywords: [iso 27001, iso 42001, ai act, gdpr, auditbewijs]
     codes: [compliance]
   - name: rapportage
     document_types: [csv]
     keywords: [kpi, kwartaalrapport, dashboard]
+    match: all
     codes: [bi]
   - name: bedrijfsbreed
     keywords: [algemene voorwaarden, personeelshandboek, gedragscode]

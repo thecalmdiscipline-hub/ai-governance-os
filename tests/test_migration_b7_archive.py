@@ -23,7 +23,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 VERSIONS = Path(__file__).resolve().parents[1] / "alembic" / "versions"
-CHAIN = ("507b3c60b20b", "bab4f26df0b0", "96a4f064fbef")
+CHAIN = ("507b3c60b20b", "bab4f26df0b0", "96a4f064fbef", "fb88a0a24a73")
 
 
 def _load(revision_prefix):
@@ -96,6 +96,8 @@ def engine(request, tmp_path):
         ))
         conn.execute(sa.text("CREATE TABLE workflow_runs (id INTEGER PRIMARY KEY, run_id VARCHAR NOT NULL UNIQUE)"))
         conn.execute(sa.text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR NOT NULL)"))
+        conn.execute(sa.text("CREATE TABLE organizations (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL)"))
+        conn.execute(sa.text("INSERT INTO organizations (id, name) VALUES (1, 'o')"))
     yield eng
     eng.dispose()
 
@@ -172,3 +174,16 @@ def test_b7_upgrade_on_empty_table(engine):
     _upgrade_to_b5(engine)
     _run(engine, _load(CHAIN[2]).upgrade)
     assert _rows(engine) == {}
+
+
+def test_archive_download_flag_upgrade_and_downgrade(engine):
+    for rev in CHAIN:
+        _run(engine, _load(rev).upgrade)
+    with engine.begin() as conn:
+        assert conn.execute(sa.text("SELECT archive_download_enabled FROM organizations WHERE id=1")).scalar() in (0, False)
+
+    _run(engine, _load(CHAIN[3]).downgrade)
+    insp = sa.inspect(engine)
+    assert "archive_download_enabled" not in {c["name"] for c in insp.get_columns("organizations")}
+    with engine.begin() as conn:
+        assert conn.execute(sa.text("SELECT name FROM organizations WHERE id=1")).scalar() == "o"

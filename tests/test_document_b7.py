@@ -14,6 +14,7 @@ from pypdf import PdfWriter
 from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.document import Document
+from app.models.organization import Organization
 from app.services import document_scope_rules
 from app.services.document_access import load_scoped_documents
 from app.services.document_scope_codes import WORKFLOW_SCOPE_CODES
@@ -135,6 +136,94 @@ def test_restore_keeps_existing_codes_fixed(hq, customer):  # V7
     assert stored in _visible(customer, "customer_support")
 
 
+def test_restore_of_old_version_while_newer_is_active_is_409(hq, customer):  # V30
+    uploader = _token(_user(customer)[0])
+    fname = f"[scope=kennis] beleid-{uuid.uuid4().hex[:6]}.txt"
+    old = _upload(uploader, name=fname, body=b"scope: kennis\nv1").json()["document"]["id"]
+    new = _upload(uploader, name=fname, body=b"scope: kennis\nv2").json()["document"]["id"]
+    assert _state(old)["status"] == "archived" and _state(new)["status"] == "coded"
+
+    token = _mfa_token(_user(hq)[0], valqeron_admin=True)
+    res = client.patch(f"/documents/{old}/scope", json={"codes": ["kennis"]}, headers=_h(token))
+    assert res.status_code == 409
+    assert res.json()["detail"]["error"] == "active_version_exists"
+    assert _state(old)["status"] == "archived" and _state(new)["status"] == "coded"
+
+
+def test_restore_without_codes_gets_the_requested_codes_as_first_codes(hq, customer):
+    doc_id, _ = _archived_doc(customer)
+    token = _mfa_token(_user(hq)[0], valqeron_admin=True)
+    assert client.patch(f"/documents/{doc_id}/scope", json={"codes": ["kennis", "gedeeld"]},
+                        headers=_h(token)).status_code == 200
+    assert _state(doc_id)["codes"] == ["gedeeld", "kennis"]
+
+
+# --- B5b: downloading archived documents ------------------------------------------
+
+def _set_archive_download(org_id, value):
+    db = SessionLocal()
+    db.get(Organization, org_id).archive_download_enabled = value
+    db.commit()
+    db.close()
+
+
+@pytest.fixture()
+def archive_org():
+    return _new_org("b7-archive")
+
+
+@pytest.mark.parametrize("path", ["download", "preview"])
+def test_customer_user_gets_403_on_archived_document_without_flag(archive_org, path):
+    doc_id, _ = _archived_doc(archive_org)
+    token = _token(_user(archive_org, role="admin")[0])
+    res = client.get(f"/documents/{doc_id}/{path}", headers=_h(token))
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"] == "archive_download_disabled"
+
+
+@pytest.mark.parametrize("path", ["download", "preview"])
+def test_customer_user_may_download_archived_document_with_flag(archive_org, path):
+    _set_archive_download(archive_org, True)
+    doc_id, _ = _archived_doc(archive_org)
+    token = _token(_user(archive_org, role="member")[0])
+    assert client.get(f"/documents/{doc_id}/{path}", headers=_h(token)).status_code == 200
+
+
+def test_coded_document_download_is_unchanged_without_flag(archive_org):
+    token = _token(_user(archive_org)[0])
+    doc_id = _upload(token, name=f"[scope=kennis] actief-{uuid.uuid4().hex[:6]}.txt").json()["document"]["id"]
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(token)).status_code == 200
+
+
+def test_valqeron_admin_downloads_archived_document_of_any_organization_with_audit(hq, archive_org):
+    doc_id, _ = _archived_doc(archive_org)
+    token = _mfa_token(_user(hq)[0], valqeron_admin=True)
+    res = client.get(f"/documents/{doc_id}/download", headers=_h(token))
+    assert res.status_code == 200 and res.content == b"Old document body."
+
+    db = SessionLocal()
+    lines = db.query(AuditLog).filter(AuditLog.action == "archived_document_downloaded").all()
+    db.close()
+    assert any(l.organization_id == hq and f"document {doc_id}" in l.details for l in lines)
+    assert any(l.organization_id == archive_org and f"document {doc_id}" in l.details for l in lines)
+
+
+def test_valqeron_admin_without_mfa_and_other_customers_get_no_archive(hq, archive_org, customer):
+    doc_id, _ = _archived_doc(archive_org)
+    no_mfa, _ = _user(hq, is_valqeron_admin=True)
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(_token(no_mfa))).status_code == 404
+    _set_archive_download(customer, True)  # the flag of another organization does not help
+    other = _token(_user(customer)[0])
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(other)).status_code == 404
+
+
+def test_valqeron_admin_cannot_download_a_customers_active_document(hq, archive_org):
+    uploader = _token(_user(archive_org)[0])
+    doc_id = _upload(uploader, name=f"[scope=kennis] live-{uuid.uuid4().hex[:6]}.txt").json()["document"]["id"]
+    token = _mfa_token(_user(hq)[0], valqeron_admin=True)
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(token)).status_code == 404
+
+
 # --- T3: suggestions (V2) -------------------------------------------------------
 
 def _blank_pdf():
@@ -201,6 +290,36 @@ def test_suggestion_for_document_type():
     assert suggest_codes("cijfers.txt", "a,b\n1,2", rules)["suggested_codes"] == []
 
 
+def test_keywords_match_whole_words_only():
+    rules = [{"name": "r", "document_types": [], "keywords": ["invoice", "ai act"], "codes": ["factuur"]}]
+    assert suggest_codes("a.txt", "Invoice 12", rules)["suggested_codes"] == ["factuur"]
+    assert suggest_codes("invoice_jan.txt", "x", rules)["suggested_codes"] == ["factuur"]
+    assert suggest_codes("a.txt", "Invoicing and reinvoice", rules)["suggested_codes"] == []
+    assert suggest_codes("a.txt", "The EU AI Act applies", rules)["suggested_codes"] == ["factuur"]
+    assert suggest_codes("a.txt", "fair actions", rules)["suggested_codes"] == []
+
+
+def test_match_all_needs_document_type_and_keyword():
+    rules = [{"name": "r", "document_types": ["csv"], "keywords": ["kpi"], "match": "all", "codes": ["bi"]}]
+    assert suggest_codes("x.csv", "kpi,waarde\n1,2", rules)["suggested_codes"] == ["bi"]
+    assert suggest_codes("x.csv", "a,b\n1,2", rules)["suggested_codes"] == []
+    assert suggest_codes("x.txt", "kpi overzicht", rules)["suggested_codes"] == []
+
+
+def test_shipped_rules_procedure_and_avg_do_not_suggest_compliance():
+    assert suggest_codes("a.txt", "Volg de procedure; de AVG geldt.")["suggested_codes"] == []
+    assert suggest_codes("a.txt", "Volgens ISO 27001 moet dit.")["suggested_codes"] == ["compliance"]
+    assert suggest_codes("cijfers.csv", "a,b\n1,2")["suggested_codes"] == []
+    assert suggest_codes("cijfers.csv", "kpi,waarde\n1,2")["suggested_codes"] == ["bi"]
+
+
+def test_hr_is_never_suggested_with_another_code(customer):
+    token = _token(_user(customer)[0])
+    res = _suggest(token, "vacature.txt", b"Vacature. Zie ook de algemene voorwaarden en de factuur.").json()
+    assert res["suggested_codes"] == ["hr"]
+    assert set(res["matched_rules"]) == {"werving", "bedrijfsbreed", "factuur"}
+
+
 def test_shipped_rules_file_loads_and_is_used():
     assert document_scope_rules.RULES and document_scope_rules.RULES == load_rules()
 
@@ -224,6 +343,8 @@ def test_rules_with_unknown_code_fail_loudly(tmp_path):  # test 12
     "rules:\n  - name: geen-codes\n    keywords: [x]\n",
     "rules:\n  - name: a\n    keywords: [x]\n    codes: [kennis]\n  - name: a\n    keywords: [y]\n    codes: [sales]\n",
     "rules:\n  - name: extra\n    keywords: [x]\n    codes: [kennis]\n    workflow: sales\n",
+    "rules:\n  - name: m\n    keywords: [x]\n    match: soms\n    codes: [kennis]\n",
+    "rules:\n  - name: m\n    keywords: [x]\n    match: all\n    codes: [kennis]\n",
     "niet: [een, regellijst]\n",
     "rules: [\n",
 ])

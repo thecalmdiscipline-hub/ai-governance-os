@@ -7,12 +7,14 @@ The rules file is loaded once, when this module is imported (at app start, via a
 An invalid file stops the app with a ScopeRulesError naming the rule and the problem: it never falls
 back silently to "no rules".
 """
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml  # PyYAML: already installed (dependency of presidio-analyzer), no new dependency
 
 from app.services.document_scope import ScopeValidationError, validate_scopes
+from app.services.document_scope_codes import EXCLUSIVE_CODES
 
 RULES_PATH = Path(__file__).resolve().parents[2] / "config" / "document_scope_rules.yaml"
 
@@ -55,7 +57,7 @@ def load_rules(path: Path = RULES_PATH) -> List[Dict[str, Any]]:
         if name in seen:
             raise ScopeRulesError(f"document_scope_rules: duplicate rule name '{name}'")
         seen.add(name)
-        unknown_keys = set(item) - {"name", "document_types", "keywords", "codes"}
+        unknown_keys = set(item) - {"name", "document_types", "keywords", "match", "codes"}
         if unknown_keys:
             raise ScopeRulesError(f"document_scope_rules: rule '{name}': unknown field(s) {sorted(unknown_keys)}")
 
@@ -63,6 +65,11 @@ def load_rules(path: Path = RULES_PATH) -> List[Dict[str, Any]]:
         keywords = _str_list(name, "keywords", item.get("keywords"))
         if not types and not keywords:
             raise ScopeRulesError(f"document_scope_rules: rule '{name}' needs document_types or keywords")
+        match = item.get("match", "any")
+        if match not in ("any", "all"):
+            raise ScopeRulesError(f"document_scope_rules: rule '{name}': match must be 'any' or 'all'")
+        if match == "all" and not (types and keywords):
+            raise ScopeRulesError(f"document_scope_rules: rule '{name}': match 'all' needs document_types and keywords")
 
         codes = _str_list(name, "codes", item.get("codes"))
         try:
@@ -70,7 +77,12 @@ def load_rules(path: Path = RULES_PATH) -> List[Dict[str, Any]]:
         except ScopeValidationError as exc:
             raise ScopeRulesError(f"document_scope_rules: rule '{name}': {exc.message} ({exc.error})")
 
-        rules.append({"name": name, "document_types": types, "keywords": keywords, "codes": sorted(set(codes))})
+        rules.append({
+            "name": name, "document_types": types, "keywords": keywords, "match": match,
+            "codes": sorted(set(codes)),
+            # whole words only: no letter or digit directly before or after the keyword
+            "patterns": [re.compile(rf"(?<![^\W_]){re.escape(k)}(?![^\W_])") for k in keywords],
+        })
     return rules
 
 
@@ -88,7 +100,21 @@ def suggest_codes(filename: str, text: Optional[str], rules: Optional[List[Dict[
     haystack = f"{filename}\n{text[:MAX_SCAN_CHARS]}".lower()
     matched, codes = [], set()
     for rule in rules:
-        if ext in rule["document_types"] or any(k in haystack for k in rule["keywords"]):
+        type_hit = ext in rule["document_types"]
+        word_hit = any(p.search(haystack) for p in _patterns(rule))
+        hit = (type_hit and word_hit) if rule.get("match", "any") == "all" else (type_hit or word_hit)
+        if hit:
             matched.append(rule["name"])
             codes.update(rule["codes"])
+    # B3a: an exclusive code ('hr') is never suggested together with another code. When it matches,
+    # it wins: suggesting only 'hr' keeps a possibly personal document away from other workflows.
+    exclusive = codes & EXCLUSIVE_CODES
+    if exclusive:
+        codes = {sorted(exclusive)[0]}
     return {"readable": True, "suggested_codes": sorted(codes), "matched_rules": matched}
+
+
+def _patterns(rule: Dict[str, Any]) -> List["re.Pattern[str]"]:
+    if "patterns" not in rule:  # rules built by hand (tests) instead of by load_rules
+        rule["patterns"] = [re.compile(rf"(?<![^\W_]){re.escape(k.lower())}(?![^\W_])") for k in rule["keywords"]]
+    return rule["patterns"]

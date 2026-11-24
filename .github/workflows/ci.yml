@@ -13,6 +13,25 @@ jobs:
     name: Run unit tests (no Codex)
     runs-on: ubuntu-latest
 
+    # Fase B7: a throwaway PostgreSQL for tests/test_migration_b7_archive.py, which runs the
+    # document migrations on PostgreSQL as well as SQLite (production is PostgreSQL). Only that
+    # test uses it, via TEST_POSTGRES_URL; the rest of the suite stays on in-memory SQLite.
+    # Dummy credentials: the database only lives for this one CI job.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-dummy-postgres-password
+          POSTGRES_DB: migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,5 +70,7 @@ jobs:
           # these for anything that outlives one CI run.
           SECRET_KEY: "ci-dummy-secret-key-not-for-production-use-0000"
           AUDIT_SECRET_KEY: "ci-dummy-audit-secret-key-not-for-production-use-0000"
+          # Fase B7: the PostgreSQL service above (migration test only).
+          TEST_POSTGRES_URL: "postgresql+psycopg2://postgres:ci-dummy-postgres-password@localhost:5432/migration_test"
         run: |
           pytest -q -m "not codex"
