@@ -15,6 +15,7 @@ from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.document import Document
 from app.models.organization import Organization
+from app.models.user import User
 from app.services import document_scope_rules
 from app.services.document_access import load_scoped_documents
 from app.services.document_scope_codes import WORKFLOW_SCOPE_CODES
@@ -391,3 +392,70 @@ def test_sales_and_compliance_still_work_without_documents(monkeypatch):
     comp = run_compliance({"input": {"policy_text": "Policy"}, "org_id": customer})
     assert sales["status"] == "ok" and sales["sources"] == []
     assert comp["status"] == "ok" and comp["sources"] == []
+
+
+# --- B5b: PUT /ops/tenants/{id}/archive-download -------------------------------------
+
+def _flag(org_id):
+    db = SessionLocal()
+    try:
+        return db.get(Organization, org_id).archive_download_enabled
+    finally:
+        db.close()
+
+
+def test_ops_route_sets_archive_download_flag_with_audit(hq, archive_org):
+    ops = _mfa_token(_user(hq)[0], super_admin=True)
+    url = f"/ops/tenants/{archive_org}/archive-download"
+
+    on = client.put(url, json={"archive_download_enabled": True}, headers=_h(ops))
+    assert on.status_code == 200 and on.json() == {"organization_id": archive_org, "archive_download_enabled": True, "changed": True}
+    assert _flag(archive_org) is True
+    again = client.put(url, json={"archive_download_enabled": True}, headers=_h(ops))
+    assert again.json()["changed"] is False
+
+    doc_id, _ = _archived_doc(archive_org)
+    member = _token(_user(archive_org, role="member")[0])
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(member)).status_code == 200
+
+    off = client.put(url, json={"archive_download_enabled": False}, headers=_h(ops))
+    assert off.status_code == 200 and _flag(archive_org) is False
+    assert client.get(f"/documents/{doc_id}/download", headers=_h(member)).status_code == 403
+
+    db = SessionLocal()
+    lines = db.query(AuditLog).filter(AuditLog.action.in_(["archive_download_enabled", "archive_download_disabled"])).all()
+    db.close()
+    for action in ("archive_download_enabled", "archive_download_disabled"):
+        assert sum(1 for l in lines if l.action == action and l.organization_id == hq) >= 1
+        assert sum(1 for l in lines if l.action == action and l.organization_id == archive_org) == 1  # not on a no-op
+
+
+def test_ops_archive_download_route_is_protected_and_validated(hq, archive_org):
+    url = f"/ops/tenants/{archive_org}/archive-download"
+    customer_admin = _token(_user(archive_org, role="admin")[0])
+    assert client.put(url, json={"archive_download_enabled": True}, headers=_h(customer_admin)).status_code == 403
+    valqeron_admin = _mfa_token(_user(hq)[0], valqeron_admin=True)  # not a super-admin
+    assert client.put(url, json={"archive_download_enabled": True}, headers=_h(valqeron_admin)).status_code == 403
+    no_mfa, no_mfa_id = _user(hq)
+    db = SessionLocal()
+    db.get(User, no_mfa_id).is_super_admin = True
+    db.commit()
+    db.close()
+    assert client.put(url, json={"archive_download_enabled": True}, headers=_h(_token(no_mfa))).status_code == 403
+    assert _flag(archive_org) is False
+
+    ops = _mfa_token(_user(hq)[0], super_admin=True)
+    assert client.put(url, json={"archive_download_enabled": True, "tier": "x"}, headers=_h(ops)).status_code == 422
+    assert client.put("/ops/tenants/99999999/archive-download", json={"archive_download_enabled": True},
+                      headers=_h(ops)).status_code == 404
+
+
+def test_valqeron_admin_preview_of_archived_document_is_audited(hq, archive_org):
+    doc_id, _ = _archived_doc(archive_org)
+    token = _mfa_token(_user(hq)[0], valqeron_admin=True)
+    assert client.get(f"/documents/{doc_id}/preview", headers=_h(token)).status_code == 200
+    db = SessionLocal()
+    lines = db.query(AuditLog).filter(AuditLog.action == "archived_document_previewed").all()
+    db.close()
+    assert any(l.organization_id == hq and f"document {doc_id}" in l.details for l in lines)
+    assert any(l.organization_id == archive_org and f"document {doc_id}" in l.details for l in lines)

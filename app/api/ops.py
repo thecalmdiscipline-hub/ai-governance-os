@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -148,3 +148,40 @@ def put_tenant_modules(
         "removed": removed,
         "modules": sorted(tm.active_module_keys(db, org.id)),
     }
+
+
+# ---------------------------------------------------------------------------
+# Archive download flag (Fase B7, B5b)
+# ---------------------------------------------------------------------------
+
+class ArchiveDownloadBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    archive_download_enabled: bool
+
+
+@router.put("/tenants/{organization_id}/archive-download")
+def put_tenant_archive_download(
+    organization_id: int,
+    body: ArchiveDownloadBody,
+    current_user: User = Depends(require_ops_access),
+    db: Session = Depends(get_db),
+):
+    """Turn on/off whether this organization's own users may download archived documents
+    (Valqeron administrators always may). Idempotent; an audit line only on a real change."""
+    org = _get_org_or_404(db, organization_id)
+    if org is None:
+        return _not_found()
+
+    changed = bool(org.archive_download_enabled) != body.archive_download_enabled
+    org.archive_download_enabled = body.archive_download_enabled
+    db.commit()
+
+    if changed:
+        log_ops_action(
+            db,
+            current_user,
+            "archive_download_enabled" if body.archive_download_enabled else "archive_download_disabled",
+            target_org_id=org.id,
+            details=f"archive_download_enabled={str(body.archive_download_enabled).lower()}",
+        )
+    return {"organization_id": org.id, "archive_download_enabled": org.archive_download_enabled, "changed": changed}
