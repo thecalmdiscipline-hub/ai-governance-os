@@ -11,6 +11,8 @@ Stand: **T1 t/m T4 klaar en getest, plus de correcties van Dennis van 24 nov (§
 | `faabb11` | T2–T4 | Terugzetroute, `POST /documents/scope-suggestion` met `config/document_scope_rules.yaml`, en verwijderen alleen door admin en operator. |
 | `333ba13` | — | Eerste versie van dit verslag. |
 | `69621e4` | Correcties | Archief downloaden (B5b, migratie `fb88a0a24a73`), 409 bij terugzetten naast een actieve versie, regelbestand aangepast, PyYAML vastgezet, PostgreSQL-service in CI. Zie §9. |
+| `f7ce439` | — | Verslag bijgewerkt met de correcties. |
+| `7aa0180` | Vervolg | `PUT /ops/tenants/{id}/archive-download`, plus een test voor de auditregel bij een preview. Zie §10. |
 
 Alembic-head is nu **`fb88a0a24a73`** (was `bab4f26df0b0` vóór B7).
 
@@ -21,7 +23,8 @@ Alembic-head is nu **`fb88a0a24a73`** (was `bab4f26df0b0` vóór B7).
 | Vóór (stand na B6) | 585 geslaagd, 1 uitgesloten |
 | Na T1 | 591 geslaagd, 1 uitgesloten |
 | Na T2–T4 | 629 geslaagd, 1 uitgesloten, 0 overgeslagen |
-| Na de correcties | **647 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Na de correcties | 647 geslaagd, 1 uitgesloten, 0 overgeslagen |
+| Na de ops-route (§10) | **650 geslaagd, 1 uitgesloten, 0 overgeslagen** |
 
 Commando: `pytest -m "not codex"`.
 
@@ -81,7 +84,7 @@ Geen nieuwe pakketten. **PyYAML** wordt nu gebruikt (`yaml.safe_load`). Het werd
 
 ## 6. Niet gebouwd
 
-- **De vlag `archive_download_enabled` aan- of uitzetten:** er is nog geen route voor. Nu kan het alleen in de database. Voorstel: een ops-route (`PUT /ops/tenants/{id}/archive-download`, met `require_ops_access` en dubbele auditregel), zoals `PUT /ops/staff`. Niet gebouwd, omdat het niet gevraagd is.
+- (Opgelost in §10: de ops-route voor de vlag `archive_download_enabled` is er nu.)
 - **Microsoft-sync en het demodocument bij provisioning** maken nog steeds documenten zonder code (status `uncoded`). Ongewijzigd, zie het verslag van B1–B6.
 
 ## 7. Frontend-gevolgen (nieuw)
@@ -121,3 +124,16 @@ Alle correcties zitten in commit `69621e4`.
    - Het voorstel-endpoint geeft **nooit** `hr` samen met een andere code. Past een `hr`-regel, dan is het voorstel alleen `[hr]`, ook als andere regels ook passen (die staan nog wel in `matched_rules`). Eigen keuze: `hr` gaat vóór, omdat een te ruim gedeeld personeelsdocument erger is dan een te nauw gedeeld gewoon document. Graag bevestigen.
    - Bij het laden wordt ook `match` gecontroleerd (alleen `any`/`all`; `all` vraagt zowel `document_types` als `keywords`). Een fout stopt de app bij het opstarten.
 6. **PostgreSQL in CI:** zie §2.
+
+## 10. Vervolg (24 nov 2026, derde ronde)
+
+1. **`PUT /ops/tenants/{id}/archive-download`** (commit `7aa0180`), in `app/api/ops.py` naast de andere tenant-routes.
+   - Body: `{"archive_download_enabled": true|false}`; andere velden geven 422.
+   - Dezelfde ops-controles als alle `/ops/*`-routes: `require_ops_access` (super-admin van HQ, actief, MFA-token), inclusief de bestaande rate limit. Een klantadmin, een Valqeron-beheerder zonder super-admin en een super-admin zonder MFA krijgen 403; een onbekende organisatie geeft 404 `tenant_not_found`.
+   - Idempotent. Alleen bij een echte wijziging komt er een auditregel via `log_ops_action`, in de HQ-keten én in die van de organisatie (`archive_download_enabled` of `archive_download_disabled`).
+   - Antwoord: `{organization_id, archive_download_enabled, changed}`.
+   - Getest: aan, nog een keer aan (`changed: false`, geen tweede auditregel), een member downloadt een archiefdocument (200), uit, dezelfde member krijgt 403.
+2. **Auditregel bij download of preview door een Valqeron-beheerder:** zat al in `69621e4` (`archived_document_downloaded` / `archived_document_previewed`, HQ en klant). Er was alleen een test voor de download; nu ook voor de preview.
+3. **`hr` wint in het voorstel:** zat al in `69621e4`. Passen een `hr`-regel en andere regels tegelijk, dan is het voorstel alleen `["hr"]` (test `test_hr_is_never_suggested_with_another_code`). Niets gewijzigd.
+
+**Push en CI:** de branch `feat/scope-documenten` is gepusht (niet `main`, niet gemerged). `ci.yml` start niet vanzelf bij een push naar deze branch (alleen bij `main`, `feature/workflow-platform` en pull requests). Daarom is CI handmatig gestart op deze branch (`workflow_dispatch`). De deploy-workflow reageert alleen op CI van `main`, dus er is niets gedeployd. Uitkomst van die CI-run: zie het bericht aan Dennis.
