@@ -15,6 +15,7 @@ from app.models.document import Document
 from app.services.document_storage import save_uploaded_document, list_uploaded_documents
 from app.services.document_reader import read_text_document, read_text_from_bytes
 from app.services.document_scope import ScopeValidationError, scopes_for_upload, validate_scopes
+from app.services.document_scope_rules import suggest_codes
 from app.core.audit import create_audit_log
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -115,6 +116,20 @@ async def upload_document(
         "document": saved,
         "replaced_document_ids": replaced_ids,
     }
+
+
+@router.post("/scope-suggestion")
+async def scope_suggestion(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_any_role(*UPLOAD_ROLES)),
+):
+    """B7 (V2): suggested codes for a file the user is about to upload, from
+    config/document_scope_rules.yaml. Stores nothing. The upload itself still needs the confirmed
+    codes in the filename and on the first line (V5)."""
+    content = await file.read()
+    filename = file.filename or "uploaded_file"
+    result = suggest_codes(filename, read_text_from_bytes(filename, content))
+    return {"status": "ok", "filename": filename, **result}
 
 
 @router.get("")
@@ -220,10 +235,14 @@ def download_document(
     )
 
 
+# B7: only admin and operator may delete (or archive) a document; auditor and member get 403.
+DELETE_ROLES = ("admin", "operator")
+
+
 @router.delete("/{document_id}")
 def delete_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_role(*DELETE_ROLES)),
     db: Session = Depends(get_db),
 ):
     if current_user.organization_id is None:
@@ -285,8 +304,10 @@ class ScopeAssignment(BaseModel):
     codes: List[str]
 
 
-# Statuses from which a Valqeron administrator may assign codes (V7: codes are fixed once set).
-ASSIGNABLE_STATUSES = ("uncoded",)
+# Statuses from which a Valqeron administrator may assign codes. B7: 'archived' -> 'coded' restores an
+# archived document. V7: codes are fixed once set, so an archived document that already has codes
+# can only be restored with exactly those codes.
+ASSIGNABLE_STATUSES = ("uncoded", "archived")
 
 
 @router.patch("/{document_id}/scope")
@@ -296,8 +317,8 @@ def assign_document_scope(
     current_user: User = Depends(require_valqeron_admin),
     db: Session = Depends(get_db),
 ):
-    """B5/B3c: only a Valqeron administrator (HQ, is_valqeron_admin, MFA) assigns codes to a
-    document of any organization, and only while the document has no codes yet."""
+    """B5/B3c/B7: only a Valqeron administrator (HQ, is_valqeron_admin, MFA) assigns codes to a
+    document of any organization: an uncoded document, or an archived one (restore to 'coded')."""
     row = db.query(Document).filter(Document.id == document_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -312,9 +333,18 @@ def assign_document_scope(
     except ScopeValidationError as exc:
         raise HTTPException(status_code=422, detail={"error": exc.error, "message": exc.message})
 
+    existing = sorted(c.code for c in row.scope_codes)
+    if existing and existing != codes:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "scope_fixed", "message": f"This document already has codes {','.join(existing)}; they cannot be changed."},
+        )
+
     previous_status = row.scope_status
-    row.scope_codes = [DocumentScopeCode(code=c) for c in codes]
+    if not existing:
+        row.scope_codes = [DocumentScopeCode(code=c) for c in codes]
     row.scope_status = "coded"
+    row.scope_status_before_archive = None
     db.commit()
 
     log_ops_action(

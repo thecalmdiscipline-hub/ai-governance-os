@@ -1,0 +1,50 @@
+# Fase B7 (V2): suggested scope codes for an upload.
+#
+# These are SUGGESTIONS only. POST /documents/scope-suggestion returns them; the uploader must still
+# put the confirmed codes in the filename ([scope=...]) and on the first line (scope: ...). Without
+# confirmed codes the upload is refused (V5). Nothing here assigns a code by itself.
+#
+# Each rule:
+#   name:            short unique name (shown in the suggestion response)
+#   document_types:  file extensions without the dot (optional)
+#   keywords:        words looked for, case-insensitive, in the filename and the document text (optional)
+#   codes:           one or more codes from app/services/document_scope_codes.py
+# A rule needs at least one of document_types / keywords. It matches when the file's extension is in
+# document_types OR one of its keywords occurs. The suggestion is the union of the codes of all
+# matching rules.
+#
+# Every code is checked when the app starts: an unknown code (or 'hr' combined with another code)
+# stops the app with a clear error. The codes list itself is only changed in code, with review.
+
+rules:
+  - name: factuur
+    keywords: [factuur, invoice, btw-nummer, factuurnummer]
+    codes: [factuur]
+  - name: offerte-contract
+    keywords: [offerte, overeenkomst, contract, quotation]
+    codes: [contract]
+  - name: vergadering
+    keywords: [notulen, agenda, vergadering, minutes]
+    codes: [meeting]
+  - name: werving
+    keywords: [vacature, sollicitatie, curriculum vitae, personeelsdossier]
+    codes: [hr]
+  - name: klantenservice
+    keywords: [faq, veelgestelde vragen, klantenservice, handleiding]
+    codes: [support]
+  - name: sales
+    keywords: [prijslijst, productfiche, ideal customer profile]
+    codes: [sales]
+  - name: marketing
+    keywords: [campagne, merkrichtlijnen, huisstijl, brand guidelines]
+    codes: [marketing]
+  - name: compliance
+    keywords: [iso 27001, iso 42001, ai act, avg, gdpr, auditbewijs, procedure]
+    codes: [compliance]
+  - name: rapportage
+    document_types: [csv]
+    keywords: [kpi, kwartaalrapport, dashboard]
+    codes: [bi]
+  - name: bedrijfsbreed
+    keywords: [algemene voorwaarden, personeelshandboek, gedragscode]
+    codes: [gedeeld]
