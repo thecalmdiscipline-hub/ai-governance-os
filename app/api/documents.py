@@ -397,7 +397,6 @@ def assign_document_scope(
     if not existing:
         row.scope_codes = [DocumentScopeCode(code=c) for c in codes]
     row.scope_status = "coded"
-    row.scope_status_before_archive = None
     db.commit()
 
     log_ops_action(

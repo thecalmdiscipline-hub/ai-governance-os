@@ -30,8 +30,8 @@ from tests.test_document_rights import (  # noqa: F401  (fixtures hq, customer a
 ALL_WORKFLOWS = sorted(WORKFLOW_SCOPE_CODES)
 
 
-def _archived_doc(org_id, codes=None, before="uncoded"):
-    """A document as the B7 migration leaves it: archived, with its previous status saved."""
+def _archived_doc(org_id, codes=None):
+    """An archived document (as the archive migration, V29 or V30 leaves it)."""
     stored = f"{uuid.uuid4().hex}_old.txt"
     d = Path(f"uploaded_documents/org_{org_id}")
     d.mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,6 @@ def _archived_doc(org_id, codes=None, before="uncoded"):
     db = SessionLocal()
     row = db.get(Document, doc.id)
     row.scope_status = "archived"
-    row.scope_status_before_archive = before
     db.commit()
     db.close()
     return doc.id, stored
@@ -51,8 +50,7 @@ def _state(document_id):
     db = SessionLocal()
     try:
         row = db.get(Document, document_id)
-        return {"status": row.scope_status, "codes": sorted(c.code for c in row.scope_codes),
-                "before": row.scope_status_before_archive}
+        return {"status": row.scope_status, "codes": sorted(c.code for c in row.scope_codes)}
     finally:
         db.close()
 
@@ -66,7 +64,7 @@ def _visible(org_id, workflow_key, **kw):
 @pytest.mark.parametrize("workflow_key", ALL_WORKFLOWS)
 def test_archived_document_with_matching_code_is_read_by_no_workflow(customer, workflow_key):
     code = WORKFLOW_SCOPE_CODES[workflow_key]
-    _, stored = _archived_doc(customer, codes=[code], before="coded")
+    _, stored = _archived_doc(customer, codes=[code])
     assert stored not in _visible(customer, workflow_key)
     assert stored not in _visible(customer, workflow_key, stored_names=[stored])
 
@@ -80,7 +78,7 @@ def test_valqeron_admin_restores_archived_document_and_workflow_reads_it(hq, cus
     res = client.patch(f"/documents/{doc_id}/scope", json={"codes": ["sales"]}, headers=_h(token))
     assert res.status_code == 200
     assert res.json()["document"] == {"id": doc_id, "scope_status": "coded", "scope_codes": ["sales"]}
-    assert _state(doc_id) == {"status": "coded", "codes": ["sales"], "before": None}
+    assert _state(doc_id) == {"status": "coded", "codes": ["sales"]}
     assert stored in _visible(customer, "sales_lead_qualification")
     assert stored not in _visible(customer, "document_knowledge")
 
@@ -98,7 +96,7 @@ def test_restore_with_unknown_code_is_422_and_stays_archived(hq, customer):  # t
     res = client.patch(f"/documents/{doc_id}/scope", json={"codes": ["onbekend"]}, headers=_h(token))
     assert res.status_code == 422
     assert res.json()["detail"]["error"] == "scope_unknown"
-    assert _state(doc_id) == {"status": "archived", "codes": [], "before": "uncoded"}
+    assert _state(doc_id) == {"status": "archived", "codes": []}
 
 
 def test_restore_without_mfa_is_403(hq, customer):  # test 7
@@ -123,7 +121,7 @@ def test_restore_writes_audit_line_in_hq_and_in_the_organization(hq, customer): 
 
 
 def test_restore_keeps_existing_codes_fixed(hq, customer):  # V7
-    doc_id, stored = _archived_doc(customer, codes=["support"], before="coded")
+    doc_id, stored = _archived_doc(customer, codes=["support"])
     token = _mfa_token(_user(hq)[0], valqeron_admin=True)
 
     other = client.patch(f"/documents/{doc_id}/scope", json={"codes": ["sales"]}, headers=_h(token))
@@ -133,7 +131,7 @@ def test_restore_keeps_existing_codes_fixed(hq, customer):  # V7
 
     same = client.patch(f"/documents/{doc_id}/scope", json={"codes": ["support"]}, headers=_h(token))
     assert same.status_code == 200
-    assert _state(doc_id) == {"status": "coded", "codes": ["support"], "before": None}
+    assert _state(doc_id) == {"status": "coded", "codes": ["support"]}
     assert stored in _visible(customer, "customer_support")
 
 

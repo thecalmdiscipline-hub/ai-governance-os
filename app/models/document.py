@@ -22,9 +22,6 @@ class Document(Base):
     # Fase B: 'uncoded' | 'coded' | 'archived'. Only 'coded' documents are read by a workflow
     # (see app/services/document_access.py).
     scope_status = Column(String(16), nullable=False, default="uncoded", server_default="uncoded", index=True)
-    # Fase B7: the status a document had before the archive migration (96a4f064fbef) archived it.
-    # Only used by that migration's downgrade; cleared when a Valqeron administrator restores it.
-    scope_status_before_archive = Column(String(16), nullable=True)
 
     organization = relationship("Organization", back_populates="documents")
     uploaded_by = relationship("User")

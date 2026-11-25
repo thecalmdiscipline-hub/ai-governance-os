@@ -4,7 +4,7 @@ Fase B7 (B5b, decision Dennis 24 Nov 2026): archived documents can be downloaded
 administrator, unless this flag is on for the document's organization. Additive only, default false.
 
 Revision ID: fb88a0a24a73
-Revises: 96a4f064fbef
+Revises: bab4f26df0b0
 Create Date: 2026-11-24
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 
 revision: str = 'fb88a0a24a73'
-down_revision: Union[str, Sequence[str], None] = '96a4f064fbef'
+down_revision: Union[str, Sequence[str], None] = 'bab4f26df0b0'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
