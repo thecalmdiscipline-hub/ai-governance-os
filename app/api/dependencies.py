@@ -118,6 +118,40 @@ def require_ops_access(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def has_valqeron_admin_powers(user: User) -> bool:
+    """Fase B5a: Valqeron staff (HQ user with is_valqeron_admin) with an MFA-verified token.
+    Same shape as has_super_admin_powers/require_ops_access; no second permission system."""
+    hq_org_id = get_hq_organization_id()
+    return (
+        bool(user.is_active)
+        and bool(getattr(user, "is_valqeron_admin", False))
+        and hq_org_id is not None
+        and user.organization_id == hq_org_id
+        and bool(getattr(user, "mfa_verified", False))
+    )
+
+
+def require_valqeron_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not has_valqeron_admin_powers(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Scope management requires a Valqeron administrator with two-step verification",
+        )
+    return current_user
+
+
+def require_any_role(*roles: str) -> Callable:
+    """Like require_role, for more than one role (plus super-admin powers)."""
+    allowed = set(roles)
+
+    def role_checker(current_user: User = Depends(get_current_user)):
+        if not has_super_admin_powers(current_user) and current_user.role not in allowed:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return current_user
+
+    return role_checker
+
+
 def require_role(required_role: str) -> Callable:
     def role_checker(current_user: User = Depends(get_current_user)):
         if not has_super_admin_powers(current_user) and current_user.role != required_role:

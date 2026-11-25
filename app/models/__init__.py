@@ -10,6 +10,8 @@ from app.models.user import User
 from .production_approval import ProductionApproval
 from .workflow_run import WorkflowRun
 from .document import Document
+from .document_scope_code import DocumentScopeCode
+from .document_usage import DocumentUsage
 from .contact_submission import ContactSubmission
 
 from app.models.microsoft_document import MicrosoftDocument

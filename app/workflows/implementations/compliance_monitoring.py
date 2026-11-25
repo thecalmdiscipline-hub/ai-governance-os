@@ -38,6 +38,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.core import pii_anonymizer
+from app.services.document_access import format_documents_for_prompt, read_scoped_documents, sources_for
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,18 @@ def _build_user_message(input_data: Dict[str, Any], context: Dict[str, Any]) -> 
         )
 
     return "\n".join(parts)
+
+
+def _org_id(payload: Dict[str, Any], org_id: Optional[int]) -> Optional[int]:
+    # The runner passes org_id inside the payload only; the parameter is kept for direct callers.
+    return org_id if org_id is not None else payload.get("org_id")
+
+
+def _doc_refs(input_data: Dict[str, Any], context: Dict[str, Any]) -> List[str]:
+    refs = input_data.get("documents") or context.get("documents")
+    if not refs:
+        return []
+    return [str(r) for r in refs] if isinstance(refs, list) else [str(refs)]
 
 
 def _parse_llm_response(content: str) -> Dict[str, Any]:
@@ -184,18 +197,27 @@ def compliance_monitoring(
 ) -> Dict[str, Any]:
     input_data = payload.get("input", {}) or {}
     context = payload.get("context", {}) or {}
+    docs: List[Dict[str, Any]] = []  # documents read for this run (V22: reported as `sources`)
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         logger.warning("compliance_monitoring: OPENAI_API_KEY not set — returning degraded response")
         output = _fallback_response("OPENAI_API_KEY not configured")
-        return {"status": "degraded", **output}
+        return {"status": "degraded", **output, "sources": []}
 
     try:
         import openai
 
         client = openai.OpenAI(api_key=api_key)
         user_message = _build_user_message(input_data, context)
+        # Fase B (V21): documents in this workflow's scope are added as context. Without any
+        # readable document the message is exactly as before.
+        docs = read_scoped_documents(
+            _org_id(payload, org_id), "compliance_monitoring",
+            stored_names=_doc_refs(input_data, context) or None,
+        )
+        if docs:
+            user_message += "\n\nOrganisation documents (in scope for compliance):" + format_documents_for_prompt(docs)
         user_message, pii_mapping = pii_anonymizer.anonymize_text_with_mapping(
             user_message, workflow="compliance_monitoring"
         )
@@ -227,31 +249,32 @@ def compliance_monitoring(
             **output,
             "model": _MODEL,
             "tokens_used": response.usage.total_tokens if response.usage else None,
+            "sources": sources_for(docs),
         }
 
     except openai.RateLimitError:
         logger.warning("compliance_monitoring: OpenAI rate limit reached")
-        return {"status": "degraded", **_fallback_response("OpenAI rate limit reached — retry later")}
+        return {"status": "degraded", **_fallback_response("OpenAI rate limit reached — retry later"), "sources": sources_for(docs)}
 
     except openai.APIConnectionError as exc:
         logger.warning("compliance_monitoring: OpenAI connection error: %s", exc)
-        return {"status": "degraded", **_fallback_response(f"Could not reach OpenAI API: {exc}")}
+        return {"status": "degraded", **_fallback_response(f"Could not reach OpenAI API: {exc}"), "sources": sources_for(docs)}
 
     except openai.APIStatusError as exc:
         logger.warning("compliance_monitoring: OpenAI API error %s: %s", exc.status_code, exc.message)
-        return {"status": "degraded", **_fallback_response(f"OpenAI API error {exc.status_code}")}
+        return {"status": "degraded", **_fallback_response(f"OpenAI API error {exc.status_code}"), "sources": sources_for(docs)}
 
     except json.JSONDecodeError as exc:
         logger.error("compliance_monitoring: Failed to parse LLM JSON response: %s", exc)
-        return {"status": "degraded", **_fallback_response("LLM returned unparseable response")}
+        return {"status": "degraded", **_fallback_response("LLM returned unparseable response"), "sources": sources_for(docs)}
 
     except pii_anonymizer.PIIAnonymizerUnavailable as exc:
         logger.error("compliance_monitoring: PII-anonimisering mislukt — LLM-call geblokkeerd: %s", exc)
-        return {"status": "degraded", **_fallback_response(str(exc))}
+        return {"status": "degraded", **_fallback_response(str(exc)), "sources": sources_for(docs)}
 
     except Exception as exc:
         logger.error("compliance_monitoring: Unexpected error: %s", exc, exc_info=True)
-        return {"status": "degraded", **_fallback_response(f"Unexpected error: {type(exc).__name__}")}
+        return {"status": "degraded", **_fallback_response(f"Unexpected error: {type(exc).__name__}"), "sources": sources_for(docs)}
 
 
 run = compliance_monitoring

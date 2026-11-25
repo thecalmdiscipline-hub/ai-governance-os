@@ -78,3 +78,7 @@ sentry-sdk[fastapi]==2.69.2
 # installed as a dependency of python-jose[cryptography], pinned to the version in use on 3.9 and 3.12.
 pyotp==2.10.0
 cryptography==44.0.3
+
+# Scope-code suggestions (Fase B7, config/document_scope_rules.yaml, loaded with yaml.safe_load).
+# Was only installed as a dependency of presidio-analyzer; pinned explicitly so it cannot disappear.
+PyYAML==6.0.3

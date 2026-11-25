@@ -19,7 +19,7 @@ def test_document_detail_download_and_delete():
     upload = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("delete_me.txt", BytesIO(b"delete me content"), "text/plain")},
+        files={"file": ("[scope=kennis] delete_me.txt", BytesIO(b"scope: kennis\ndelete me content"), "text/plain")},
     )
     assert upload.status_code == 200
     doc = upload.json()["document"]
@@ -30,21 +30,21 @@ def test_document_detail_download_and_delete():
         headers={"Authorization": f"Bearer {token}"},
     )
     assert detail.status_code == 200
-    assert detail.json()["document"]["filename"] == "delete_me.txt"
+    assert detail.json()["document"]["filename"] == "[scope=kennis] delete_me.txt"
 
     download = client.get(
         f"/documents/{document_id}/download",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert download.status_code == 200
-    assert download.content == b"delete me content"
+    assert download.content == b"scope: kennis\ndelete me content"
 
     delete = client.delete(
         f"/documents/{document_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert delete.status_code == 200
-    assert delete.json()["deleted"]["filename"] == "delete_me.txt"
+    assert delete.json()["deleted"]["filename"] == "[scope=kennis] delete_me.txt"
 
     detail_after = client.get(
         f"/documents/{document_id}",

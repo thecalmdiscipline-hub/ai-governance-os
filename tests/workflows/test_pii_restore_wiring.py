@@ -265,6 +265,7 @@ def test_document_knowledge_restores_answer_and_reasoning(monkeypatch, tmp_path)
         path=str(org_dir / stored_name),
         content_type="text/plain",
         size=len(content),
+        scope_codes=["kennis"],
     )
 
     _fixed_mapping_anonymize(monkeypatch)

@@ -13,6 +13,9 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"))
     is_super_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    # Fase B5a: Valqeron staff who may assign scope codes to documents. Only set through
+    # PUT /ops/staff/{user_id}; only counts for an HQ user with an MFA-verified token.
+    is_valqeron_admin = Column(Boolean, nullable=False, default=False, server_default=false())
 
     organization = relationship("Organization")
 

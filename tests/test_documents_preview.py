@@ -19,7 +19,7 @@ def test_document_preview_returns_text_for_txt_file():
     upload = client.post(
         "/documents/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("preview_test.txt", BytesIO(b"preview text content"), "text/plain")},
+        files={"file": ("[scope=kennis] preview_test.txt", BytesIO(b"scope: kennis\npreview text content"), "text/plain")},
     )
     assert upload.status_code == 200
     document_id = upload.json()["document"]["id"]
@@ -32,5 +32,5 @@ def test_document_preview_returns_text_for_txt_file():
     assert preview.status_code == 200
     data = preview.json()
     assert data["status"] == "ok"
-    assert data["document"]["filename"] == "preview_test.txt"
+    assert data["document"]["filename"] == "[scope=kennis] preview_test.txt"
     assert "preview text content" in data["preview"]["text"]

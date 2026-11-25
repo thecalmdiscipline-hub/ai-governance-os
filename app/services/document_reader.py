@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
@@ -59,5 +60,39 @@ def read_text_document(organization_id: int, stored_name: str) -> Optional[str]:
     # WORD
     if suffix == ".docx":
         return read_docx(file_path)
+
+    return None
+
+
+def read_text_from_bytes(filename: str, content: bytes) -> Optional[str]:
+    """Same extraction as read_text_document, but from in-memory bytes (used to validate an upload
+    before anything is written to disk)."""
+    suffix = Path(filename or "").suffix.lower()
+
+    if suffix in {".txt", ".md", ".csv", ".json"}:
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                return content.decode("latin-1")
+            except Exception:
+                return None
+
+    if suffix == ".pdf":
+        try:
+            reader = PdfReader(BytesIO(content))
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            return text.strip() or None
+        except Exception:
+            return None
+
+    if suffix == ".docx":
+        try:
+            doc = DocxDocument(BytesIO(content))
+            return "\n".join([p.text for p in doc.paragraphs]).strip() or None
+        except Exception:
+            return None
 
     return None
