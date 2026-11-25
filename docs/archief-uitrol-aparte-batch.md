@@ -6,13 +6,14 @@ Besluit Dennis, 25 nov 2026: archivering komt pas op productie nadat de off-site
 
 ## Stand (25 nov 2026)
 
-- `8f7381a`: zonder archiefmigratie. Alembic-head `fb88a0a24a73`. 646 geslaagd, 1 uitgesloten.
-- `3defa42`: mét archiefmigratie als laatste in de keten. Alembic-head `96a4f064fbef`. 653 geslaagd, 1 uitgesloten.
+- `e30bf9b`: zonder archiefmigratie, mét de downloadregel voor `uncoded`. Alembic-head `fb88a0a24a73`. 682 geslaagd, 1 uitgesloten.
+- `fb60d21`: mét archiefmigratie als laatste code-commit. Alembic-head `96a4f064fbef`. 689 geslaagd, 1 uitgesloten.
+- (Oude hashes vóór de herordening: `725576a` en `3defa42`.)
 
 ## Uitrol
 
-1. Uitrol zonder archiveren: deploy `8f7381a`, of een latere commit vóór `3defa42`.
-2. Uitrol van het archiveren: pas als de back-up werkt, in een eigen deploy, vanaf `3defa42` of een latere commit.
+1. Uitrol zonder archiveren: deploy `e30bf9b`.
+2. Uitrol van het archiveren: pas als de back-up werkt, in een eigen deploy, vanaf `fb60d21` of een latere commit.
 
 ## Wat niet doen
 

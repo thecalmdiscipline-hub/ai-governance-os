@@ -15,9 +15,10 @@ Stand: **T1 t/m T4 klaar en getest, plus de correcties van Dennis van 24 nov (§
 | `7aa0180` | Vervolg | `PUT /ops/tenants/{id}/archive-download`, plus een test voor de auditregel bij een preview. Zie §10. |
 | `47d5b74` | — | Verslag, derde ronde. |
 | `8f7381a` | Losmaken | Archief-migratie uit de keten gehaald; de app gebruikt `scope_status_before_archive` niet meer. Zie §11. |
-| **`3defa42`** | **T1 (archief-migratie)** | **De archief-migratie `96a4f064fbef` als eigen, laatste commit. Alleen dit migratiebestand en de bijbehorende test. Zie §11.** |
-| `0e09f5e` | — | Verslag, §11. |
-| `725576a` | Download uncoded | Downloadregel ook voor `uncoded`, plus de twee invoerdocumenten. Zie §12. |
+| `5c89a7b` | — | Verslag, §11 (was `0e09f5e`, zie §13). |
+| `5977df6` | — | Verslag, §12 (was `c9faddd`, zie §13). |
+| `e30bf9b` | Download uncoded | Downloadregel ook voor `uncoded`, plus de twee invoerdocumenten. Zie §12. Was `725576a`. **Stand zonder archiveren.** |
+| **`fb60d21`** | **T1 (archief-migratie)** | **De archief-migratie `96a4f064fbef` als laatste code-commit. Alleen dit migratiebestand en de bijbehorende test. Was `3defa42`, zie §13.** |
 
 Alembic-keten na §11: `bab4f26df0b0` → `fb88a0a24a73` (archief-vlag) → **`96a4f064fbef`** (archief-migratie, head). Zonder de archief-commit is de head `fb88a0a24a73`.
 
@@ -32,7 +33,9 @@ Alembic-keten na §11: `bab4f26df0b0` → `fb88a0a24a73` (archief-vlag) → **`9
 | Na de ops-route (§10) | 650 geslaagd, 1 uitgesloten, 0 overgeslagen |
 | Zonder archief-commit (`8f7381a`, §11) | **646 geslaagd, 1 uitgesloten, 0 overgeslagen** |
 | Mét archief-commit (`3defa42`, §11) | 653 geslaagd, 1 uitgesloten, 0 overgeslagen |
-| Na downloadregel uncoded (`725576a`, §12) | **689 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Na downloadregel uncoded (`725576a`, §12) | 689 geslaagd, 1 uitgesloten, 0 overgeslagen |
+| Nieuwe volgorde, zonder archiveren (`e30bf9b`, §13) | **682 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Nieuwe volgorde, mét archiveren (`fb60d21`, §13) | **689 geslaagd, 1 uitgesloten, 0 overgeslagen** |
 
 Commando: `pytest -m "not codex"`.
 
@@ -165,13 +168,13 @@ Hoe:
 
 **Downgrade, gewijzigd:** omdat de app de kolom niet meer leegmaakt bij terugzetten, geldt nu: een teruggezet document is `coded` en blijft bij een downgrade `coded`. Uitzondering: een document dat is teruggezet en daarna opnieuw gearchiveerd (V29/V30), krijgt bij een downgrade zijn status van vóór de migratie terug. Dit staat in het migratiebestand zelf.
 
-**Uitrol zonder archiveren:** de commit vóór `3defa42` deployen, of het migratiebestand `96a4f064fbef_archive_existing_documents.py` weglaten. Komt er later nog een commit bovenop `3defa42`, dan zit de archief-migratie daar ook in; die moet dan bewust weggelaten of teruggedraaid worden.
+**Uitrol zonder archiveren:** de commit vóór de archief-commit deployen (sinds §13: `e30bf9b`), of het migratiebestand `96a4f064fbef_archive_existing_documents.py` weglaten. Komt er later nog een commit bovenop `3defa42`, dan zit de archief-migratie daar ook in; die moet dan bewust weggelaten of teruggedraaid worden.
 
 Niet gepusht, niet gemerged, niets op productie.
 
 ## 12. Downloadregel ook voor niet-gecodeerde documenten (25 nov 2026)
 
-Opdracht: `docs/bouwopdracht-download-uncoded.md`. Commit **`725576a`**. Het genoemde `docs/beslissingen-log.md` staat niet in de repo; ik heb gewerkt vanuit de bouwopdracht zelf.
+Opdracht: `docs/bouwopdracht-download-uncoded.md`. Commit **`725576a`**, na de herordening in §13 **`e30bf9b`**. `docs/beslissingen-log.md` stond toen nog niet in de repo; het staat er nu wel (zie §13).
 
 **Wat is gewijzigd** (alleen `app/api/documents.py`, functie `get_readable_document`, voor download en preview):
 
@@ -190,6 +193,41 @@ Opdracht: `docs/bouwopdracht-download-uncoded.md`. Commit **`725576a`**. Het gen
 
 **Tests** (`tests/test_document_download_uncoded.py`, 36 tests): de acht verplichte gevallen, elk voor download en preview, en voor admin, member en auditor; daarnaast een Valqeron-beheerder zonder MFA (404) en een Valqeron-beheerder op een gecodeerd klantdocument (404, ongewijzigd). Testset vóór: 653 geslaagd. Na: **689 geslaagd**, 1 uitgesloten, 0 overgeslagen.
 
-**Volgorde van de commits, graag beslissen:** zoals gevraagd staat `725576a` bovenop de nieuwste commit, dus **na** de archief-commit `3defa42`. Wie `725576a` deployt, krijgt de archiefmigratie mee. Dat botst met `docs/archief-uitrol-aparte-batch.md` (uitrol zonder archiveren = een commit vóór `3defa42`). Voorstel: de commits zo ordenen dat de archief-migratie weer de laatste is. Dat kan zonder force-push, want `8f7381a`, `3defa42`, `0e09f5e` en `725576a` zijn nog niet gepusht. Wel krijgen de archief-commit en de commits erna dan een nieuwe hash. Niet gedaan zonder jouw akkoord.
+**Volgorde van de commits (opgelost in §13):** zoals gevraagd staat `725576a` bovenop de nieuwste commit, dus **na** de archief-commit `3defa42`. Wie `725576a` deployt, krijgt de archiefmigratie mee. Dat botst met `docs/archief-uitrol-aparte-batch.md` (uitrol zonder archiveren = een commit vóór `3defa42`). Voorstel: de commits zo ordenen dat de archief-migratie weer de laatste is. Dat kan zonder force-push, want `8f7381a`, `3defa42`, `0e09f5e` en `725576a` zijn nog niet gepusht. Wel krijgen de archief-commit en de commits erna dan een nieuwe hash. Niet gedaan zonder jouw akkoord.
+
+Niet gepusht, niet gemerged, niets op productie.
+
+## 13. Volgorde van de commits hersteld (25 nov 2026)
+
+Besluit: `docs/beslissingen-log.md`, sectie F. De archiefmigratie is weer de laatste code-commit, met de downloadregel er direct vóór.
+
+**Hoe:** met cherry-pick op `8f7381a`, in de nieuwe volgorde. Geen geschiedenis weggegooid:
+- de oude stand staat op de lokale branch `backup/scope-documenten-before-reorder` (`c9faddd`);
+- er is geen force-push nodig, want alleen `47d5b74` en ouder waren gepusht, en die zijn ongewijzigd.
+
+De eindstand (alle bestanden) is gelijk aan die van vóór de herordening (`git diff` leeg).
+
+| Oud | Nieuw | Inhoud |
+|---|---|---|
+| `8f7381a` | `8f7381a` | Archief-migratie uit de keten (ongewijzigd) |
+| `0e09f5e` | `5c89a7b` | Verslag, §11 |
+| `c9faddd` | `5977df6` | Verslag, §12 |
+| `725576a` | **`e30bf9b`** | Downloadregel uncoded |
+| `3defa42` | **`fb60d21`** | Archief-migratie |
+
+| Stand | Commit | Alembic-head | Testset |
+|---|---|---|---|
+| Zonder archiveren | `e30bf9b` | `fb88a0a24a73` | **682 geslaagd**, 1 uitgesloten, 0 overgeslagen |
+| Met archiveren | `fb60d21` | `96a4f064fbef` | **689 geslaagd**, 1 uitgesloten, 0 overgeslagen |
+
+Het verschil van 7 tests zijn precies de tests van de archiefmigratie (`tests/test_migration_b7_archive.py`). Beide standen zijn gedraaid in een schone checkout, met dezelfde dummy-omgevingsvariabelen als CI (geen `.env`).
+
+**Let op, één documentcommit staat ná de archief-commit.** Dit verslag kan de hashes van `e30bf9b` en `fb60d21` niet noemen als het er zelf vóór staat (de hashes veranderen dan weer). Daarom staat deze verslag-commit erna. Daarin zitten alleen documenten:
+- dit verslag;
+- `docs/archief-uitrol-aparte-batch.md` met de nieuwe hashes;
+- `docs/beslissingen-log.md` (nieuw, door jou geschreven);
+- jouw verduidelijking van §1 in `docs/bouwopdracht-download-uncoded.md`.
+
+De archiefmigratie is dus de laatste commit met code. Uitrol zonder archiveren = `e30bf9b`.
 
 Niet gepusht, niet gemerged, niets op productie.

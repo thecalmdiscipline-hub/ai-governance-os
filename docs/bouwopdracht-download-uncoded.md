@@ -14,7 +14,7 @@ Lees eerst: `docs/beslissingen-log.md` (sectie C), `docs/verslag-fase-b7.md`.
 
 ## 1. Besluit (Dennis, 25 nov 2026)
 
-Oude documenten die nog niet gecodeerd zijn (status `uncoded`) mogen net als gearchiveerde documenten alleen door Valqeron worden gedownload, tenzij de vlag `archive_download_enabled` voor die organisatie aan staat. Zo lekt er niets, ook zonder de archiefmigratie.
+Oude documenten die nog niet gecodeerd zijn (status `uncoded`) mogen alleen door Valqeron worden gedownload. De vlag `archive_download_enabled` heeft hier **geen** invloed: die geldt alleen voor gearchiveerde documenten (status `archived`). Zo lekt er niets, ook zonder de archiefmigratie.
 
 ## 2. Taken
 
