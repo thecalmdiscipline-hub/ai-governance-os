@@ -36,33 +36,49 @@ def get_org_document(db: Session, organization_id: int, document_id: int) -> Doc
     return row
 
 
+# Statuses whose content only Valqeron may see (B5b; extended to 'uncoded' on 25 Nov 2026, so an old
+# document that was never coded cannot leak either, with or without the archive migration).
+RESTRICTED_STATUSES = ("archived", "uncoded")
+
+
 def get_readable_document(db: Session, user: User, document_id: int) -> Document:
     """B5b: the document whose content (download or preview) this user may see.
 
-    - Not archived: only documents of the user's own organization (unchanged).
-    - Archived: a Valqeron administrator (any organization); a user of the document's own
-      organization only when that organization has archive_download_enabled (otherwise 403).
+    - 'coded': only documents of the user's own organization (unchanged).
+    - 'archived': a Valqeron administrator (any organization); a user of the document's own
+      organization only when that organization has archive_download_enabled, otherwise 403.
+    - 'uncoded': a Valqeron administrator (any organization); a customer user never (403, also with
+      archive_download_enabled on: an uncoded document is not an archive).
     A document of another organization is always a 404 for a customer user (no existence leak).
     """
     row = db.query(Document).filter(Document.id == document_id).first()
+    valqeron = has_valqeron_admin_powers(user)
     own = row is not None and user.organization_id is not None and row.organization_id == int(user.organization_id)
-    if row is None or (not own and not (row.scope_status == "archived" and has_valqeron_admin_powers(user))):
+    if row is None or (not own and not (row.scope_status in RESTRICTED_STATUSES and valqeron)):
         raise HTTPException(status_code=404, detail="Document not found")
-    if row.scope_status == "archived" and not has_valqeron_admin_powers(user):
+    if valqeron or row.scope_status not in RESTRICTED_STATUSES:
+        return row
+    if row.scope_status == "archived":
         org = db.get(Organization, row.organization_id)
-        if not (org and org.archive_download_enabled):
-            raise HTTPException(
-                status_code=403,
-                detail={"error": "archive_download_disabled",
-                        "message": "Archived documents can only be downloaded by Valqeron for this organization."},
-            )
-    return row
+        if org and org.archive_download_enabled:
+            return row
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "archive_download_disabled",
+                    "message": "Archived documents can only be downloaded by Valqeron for this organization."},
+        )
+    raise HTTPException(
+        status_code=403,
+        detail={"error": "uncoded_download_disabled",
+                "message": "Documents without scope codes can only be downloaded by Valqeron."},
+    )
 
 
 def _audit_valqeron_archive_access(db: Session, user: User, row: Document, what: str) -> None:
-    # A Valqeron administrator reading an archived document of a customer: HQ chain + customer chain.
-    if row.scope_status == "archived" and has_valqeron_admin_powers(user):
-        log_ops_action(db, user, f"archived_document_{what}", target_org_id=row.organization_id,
+    # A Valqeron administrator reading an archived or uncoded document: HQ chain + customer chain.
+    # Actions: archived_document_downloaded/previewed, uncoded_document_downloaded/previewed.
+    if row.scope_status in RESTRICTED_STATUSES and has_valqeron_admin_powers(user):
+        log_ops_action(db, user, f"{row.scope_status}_document_{what}", target_org_id=row.organization_id,
                        details=f"document {row.id}: {row.filename}")
 
 
