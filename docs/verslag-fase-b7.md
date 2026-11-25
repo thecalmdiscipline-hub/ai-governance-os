@@ -13,8 +13,11 @@ Stand: **T1 t/m T4 klaar en getest, plus de correcties van Dennis van 24 nov (§
 | `69621e4` | Correcties | Archief downloaden (B5b, migratie `fb88a0a24a73`), 409 bij terugzetten naast een actieve versie, regelbestand aangepast, PyYAML vastgezet, PostgreSQL-service in CI. Zie §9. |
 | `f7ce439` | — | Verslag bijgewerkt met de correcties. |
 | `7aa0180` | Vervolg | `PUT /ops/tenants/{id}/archive-download`, plus een test voor de auditregel bij een preview. Zie §10. |
+| `47d5b74` | — | Verslag, derde ronde. |
+| `8f7381a` | Losmaken | Archief-migratie uit de keten gehaald; de app gebruikt `scope_status_before_archive` niet meer. Zie §11. |
+| **`3defa42`** | **T1 (archief-migratie)** | **De archief-migratie `96a4f064fbef` als eigen, laatste commit. Alleen dit migratiebestand en de bijbehorende test. Zie §11.** |
 
-Alembic-head is nu **`fb88a0a24a73`** (was `bab4f26df0b0` vóór B7).
+Alembic-keten na §11: `bab4f26df0b0` → `fb88a0a24a73` (archief-vlag) → **`96a4f064fbef`** (archief-migratie, head). Zonder de archief-commit is de head `fb88a0a24a73`.
 
 ## 2. Testaantallen
 
@@ -24,7 +27,9 @@ Alembic-head is nu **`fb88a0a24a73`** (was `bab4f26df0b0` vóór B7).
 | Na T1 | 591 geslaagd, 1 uitgesloten |
 | Na T2–T4 | 629 geslaagd, 1 uitgesloten, 0 overgeslagen |
 | Na de correcties | 647 geslaagd, 1 uitgesloten, 0 overgeslagen |
-| Na de ops-route (§10) | **650 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Na de ops-route (§10) | 650 geslaagd, 1 uitgesloten, 0 overgeslagen |
+| Zonder archief-commit (`8f7381a`, §11) | **646 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Mét archief-commit (`3defa42`, §11) | **653 geslaagd, 1 uitgesloten, 0 overgeslagen** |
 
 Commando: `pytest -m "not codex"`.
 
@@ -137,3 +142,26 @@ Alle correcties zitten in commit `69621e4`.
 3. **`hr` wint in het voorstel:** zat al in `69621e4`. Passen een `hr`-regel en andere regels tegelijk, dan is het voorstel alleen `["hr"]` (test `test_hr_is_never_suggested_with_another_code`). Niets gewijzigd.
 
 **Push en CI:** de branch `feat/scope-documenten` is gepusht (niet `main`, niet gemerged). `ci.yml` start niet vanzelf bij een push naar deze branch (alleen bij `main`, `feature/workflow-platform` en pull requests). Daarom is CI handmatig gestart op deze branch (`workflow_dispatch`). De deploy-workflow reageert alleen op CI van `main`, dus er is niets gedeployd. Uitkomst van die CI-run: zie het bericht aan Dennis.
+
+## 11. Archief-migratie apart (25 nov 2026)
+
+De opdracht verwees naar `claude/archief-uitrol-aparte-batch.md`. Dat bestand staat niet in de repo; ik heb gewerkt vanuit jouw bericht en `docs/bouwopdracht-fase-b7.md`.
+
+**De archief-migratie staat in commit `3defa42`** (revisie `96a4f064fbef`). Die commit bevat alleen het migratiebestand en de test ervan, verder niets.
+
+Hoe:
+- **`8f7381a`** haalt de archief-migratie uit de keten. De migratie voor de vlag `archive_download_enabled` (`fb88a0a24a73`) volgt nu direct op `bab4f26df0b0`. De app gebruikt de kolom `scope_status_before_archive` niet meer: die is uit het model gehaald, en de terugzetroute maakt hem niet meer leeg. De migratietests zijn gesplitst: `tests/test_migration_b7.py` (B1 → B5 → vlag, plus de gedeelde fixtures) en `tests/test_migration_b7_archive.py` (alleen de archief-migratie).
+- **`3defa42`** zet de archief-migratie terug als laatste revisie, op `fb88a0a24a73`. Er is geen geschiedenis herschreven: de eerdere commits (`fddd56b` e.d.) staan er nog, dus een gewone push volstaat (geen force-push nodig).
+
+**Zonder de archief-commit** (stand `8f7381a`):
+- De kolom `scope_status` blijft. Bestaande documenten houden hun status: `uncoded` sinds B1 (nieuwe test `test_without_archive_migration_existing_rows_keep_their_status`, op SQLite en PostgreSQL).
+- Let op: ook `uncoded` wordt door geen enkele workflow gelezen (B3). Wat wél verschilt met archiveren: een `uncoded` document valt niet onder de archiefregel voor downloaden (B5b), dus de eigen organisatie kan het gewoon downloaden en bekijken. Een Valqeron-beheerder kan het coderen via `PATCH` (route voor `uncoded`). En verwijderen werkt zoals altijd (archiveren als het al in een run gebruikt is).
+- Testset: **646 geslaagd**, 1 uitgesloten, 0 overgeslagen (PostgreSQL-tests gedraaid).
+
+**Mét de archief-commit** (stand `3defa42`): testset **653 geslaagd**, 1 uitgesloten, 0 overgeslagen.
+
+**Downgrade, gewijzigd:** omdat de app de kolom niet meer leegmaakt bij terugzetten, geldt nu: een teruggezet document is `coded` en blijft bij een downgrade `coded`. Uitzondering: een document dat is teruggezet en daarna opnieuw gearchiveerd (V29/V30), krijgt bij een downgrade zijn status van vóór de migratie terug. Dit staat in het migratiebestand zelf.
+
+**Uitrol zonder archiveren:** de commit vóór `3defa42` deployen, of het migratiebestand `96a4f064fbef_archive_existing_documents.py` weglaten. Komt er later nog een commit bovenop `3defa42`, dan zit de archief-migratie daar ook in; die moet dan bewust weggelaten of teruggedraaid worden.
+
+Niet gepusht, niet gemerged, niets op productie.
