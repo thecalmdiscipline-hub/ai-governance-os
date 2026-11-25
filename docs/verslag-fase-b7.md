@@ -16,6 +16,8 @@ Stand: **T1 t/m T4 klaar en getest, plus de correcties van Dennis van 24 nov (§
 | `47d5b74` | — | Verslag, derde ronde. |
 | `8f7381a` | Losmaken | Archief-migratie uit de keten gehaald; de app gebruikt `scope_status_before_archive` niet meer. Zie §11. |
 | **`3defa42`** | **T1 (archief-migratie)** | **De archief-migratie `96a4f064fbef` als eigen, laatste commit. Alleen dit migratiebestand en de bijbehorende test. Zie §11.** |
+| `0e09f5e` | — | Verslag, §11. |
+| `725576a` | Download uncoded | Downloadregel ook voor `uncoded`, plus de twee invoerdocumenten. Zie §12. |
 
 Alembic-keten na §11: `bab4f26df0b0` → `fb88a0a24a73` (archief-vlag) → **`96a4f064fbef`** (archief-migratie, head). Zonder de archief-commit is de head `fb88a0a24a73`.
 
@@ -29,7 +31,8 @@ Alembic-keten na §11: `bab4f26df0b0` → `fb88a0a24a73` (archief-vlag) → **`9
 | Na de correcties | 647 geslaagd, 1 uitgesloten, 0 overgeslagen |
 | Na de ops-route (§10) | 650 geslaagd, 1 uitgesloten, 0 overgeslagen |
 | Zonder archief-commit (`8f7381a`, §11) | **646 geslaagd, 1 uitgesloten, 0 overgeslagen** |
-| Mét archief-commit (`3defa42`, §11) | **653 geslaagd, 1 uitgesloten, 0 overgeslagen** |
+| Mét archief-commit (`3defa42`, §11) | 653 geslaagd, 1 uitgesloten, 0 overgeslagen |
+| Na downloadregel uncoded (`725576a`, §12) | **689 geslaagd, 1 uitgesloten, 0 overgeslagen** |
 
 Commando: `pytest -m "not codex"`.
 
@@ -163,5 +166,30 @@ Hoe:
 **Downgrade, gewijzigd:** omdat de app de kolom niet meer leegmaakt bij terugzetten, geldt nu: een teruggezet document is `coded` en blijft bij een downgrade `coded`. Uitzondering: een document dat is teruggezet en daarna opnieuw gearchiveerd (V29/V30), krijgt bij een downgrade zijn status van vóór de migratie terug. Dit staat in het migratiebestand zelf.
 
 **Uitrol zonder archiveren:** de commit vóór `3defa42` deployen, of het migratiebestand `96a4f064fbef_archive_existing_documents.py` weglaten. Komt er later nog een commit bovenop `3defa42`, dan zit de archief-migratie daar ook in; die moet dan bewust weggelaten of teruggedraaid worden.
+
+Niet gepusht, niet gemerged, niets op productie.
+
+## 12. Downloadregel ook voor niet-gecodeerde documenten (25 nov 2026)
+
+Opdracht: `docs/bouwopdracht-download-uncoded.md`. Commit **`725576a`**. Het genoemde `docs/beslissingen-log.md` staat niet in de repo; ik heb gewerkt vanuit de bouwopdracht zelf.
+
+**Wat is gewijzigd** (alleen `app/api/documents.py`, functie `get_readable_document`, voor download en preview):
+
+| Status | Klantgebruiker, vlag uit | Klantgebruiker, vlag aan | Valqeron-beheerder (HQ, vlag, MFA) |
+|---|---|---|---|
+| `coded` | 200 (ongewijzigd) | 200 (ongewijzigd) | 404 bij een klant (ongewijzigd) |
+| `archived` | 403 `archive_download_disabled` | 200 | 200 + auditregel |
+| `uncoded` | **403 `uncoded_download_disabled`** (nieuw) | **403** (nieuw: een niet-gecodeerd document is geen archief) | **200 + auditregel** (nieuw) |
+| document van een andere organisatie | 404 | 404 | zie hierboven |
+
+- De regel geldt voor elke rol (admin, operator, member, auditor).
+- Auditregel bij een Valqeron-beheerder: zelfde mechanisme als bij archief (`log_ops_action`, HQ-keten en keten van de klant), met de acties `uncoded_document_downloaded` en `uncoded_document_previewed`.
+- Let op: §1 van de bouwopdracht zegt "tenzij de vlag aan staat", maar T1 en test 2 zeggen dat `uncoded` ook met de vlag 403 blijft. Ik heb T1 en test 2 gevolgd.
+
+**De archiefmigratie is niet nodig om de download af te schermen.** De regel hangt aan de status zelf: oude documenten zijn sinds B1 `uncoded` en zijn dus ook zonder de archiefmigratie alleen voor Valqeron te downloaden of te bekijken. De code van `725576a` hangt niet af van de archiefmigratie.
+
+**Tests** (`tests/test_document_download_uncoded.py`, 36 tests): de acht verplichte gevallen, elk voor download en preview, en voor admin, member en auditor; daarnaast een Valqeron-beheerder zonder MFA (404) en een Valqeron-beheerder op een gecodeerd klantdocument (404, ongewijzigd). Testset vóór: 653 geslaagd. Na: **689 geslaagd**, 1 uitgesloten, 0 overgeslagen.
+
+**Volgorde van de commits, graag beslissen:** zoals gevraagd staat `725576a` bovenop de nieuwste commit, dus **na** de archief-commit `3defa42`. Wie `725576a` deployt, krijgt de archiefmigratie mee. Dat botst met `docs/archief-uitrol-aparte-batch.md` (uitrol zonder archiveren = een commit vóór `3defa42`). Voorstel: de commits zo ordenen dat de archief-migratie weer de laatste is. Dat kan zonder force-push, want `8f7381a`, `3defa42`, `0e09f5e` en `725576a` zijn nog niet gepusht. Wel krijgen de archief-commit en de commits erna dan een nieuwe hash. Niet gedaan zonder jouw akkoord.
 
 Niet gepusht, niet gemerged, niets op productie.
